@@ -1,109 +1,132 @@
+import { useEffect, useMemo, useState } from 'react';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Thermometer, Heart, Activity, AlertTriangle } from 'lucide-react';
 import { KPICard, Card } from '../components/Card';
 import { Badge } from '../components/Badge';
-import { Stethoscope, Thermometer, Heart, Activity, AlertTriangle } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { FacultyRecord, normalizeRiskLevel, recordDateLabel, wellnessApi } from '../api/wellnessApi';
 
-const feverTrendData = [
-  { day: 'Mon', cases: 12 },
-  { day: 'Tue', cases: 15 },
-  { day: 'Wed', cases: 9 },
-  { day: 'Thu', cases: 18 },
-  { day: 'Fri', cases: 14 },
-  { day: 'Sat', cases: 8 },
-  { day: 'Sun', cases: 6 },
-];
+function riskVariant(risk: string): 'danger' | 'warning' | 'info' | 'success' {
+  if (risk === 'Critical') return 'danger';
+  if (risk === 'High') return 'warning';
+  if (risk === 'Moderate') return 'info';
+  return 'success';
+}
 
-const bpSeverityData = [
-  { category: 'Normal', count: 580 },
-  { category: 'Elevated', count: 150 },
-  { category: 'Stage 1', count: 85 },
-  { category: 'Stage 2', count: 42 },
-  { category: 'Critical', count: 18 },
-];
-
-const heartRateData = [
-  { time: '8:00', avgHR: 68 },
-  { time: '10:00', avgHR: 72 },
-  { time: '12:00', avgHR: 75 },
-  { time: '14:00', avgHR: 73 },
-  { time: '16:00', avgHR: 70 },
-  { time: '18:00', avgHR: 68 },
-];
-
-const clinicalRecords = [
-  { id: 1, patient: 'John Doe', bp: '155/102', temp: '38.2°C', hr: '95 bpm', risk: 'Critical', status: 'Urgent', date: '2026-05-23 10:30' },
-  { id: 2, patient: 'Sarah Smith', bp: '145/90', temp: '37.8°C', hr: '88 bpm', risk: 'High', status: 'Monitor', date: '2026-05-23 11:15' },
-  { id: 3, patient: 'Mike Johnson', bp: '138/88', temp: '37.2°C', hr: '82 bpm', risk: 'Moderate', status: 'Follow-up', date: '2026-05-23 12:00' },
-  { id: 4, patient: 'Emily Brown', bp: '120/78', temp: '36.6°C', hr: '70 bpm', risk: 'Normal', status: 'Cleared', date: '2026-05-23 13:45' },
-  { id: 5, patient: 'David Lee', bp: '148/95', temp: '37.5°C', hr: '90 bpm', risk: 'High', status: 'Monitor', date: '2026-05-23 14:20' },
-];
+const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export function ClinicMonitoringDashboard() {
+  const [records, setRecords] = useState<FacultyRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const facultyRecords = await wellnessApi.getFacultyRecords();
+        if (!cancelled) setRecords(facultyRecords);
+      } catch (fetchError) {
+        if (!cancelled) {
+          setError(fetchError instanceof Error ? fetchError.message : 'Failed to load clinic records.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const feverTrendData = useMemo(() => {
+    const grouped = new Map<string, number>();
+
+    records.forEach((record) => {
+      if (record.Body_Temperature_C < 37.5) return;
+      const key = record.Month;
+      grouped.set(key, (grouped.get(key) ?? 0) + 1);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([day, cases]) => ({ day: day.slice(0, 3), month: day, cases }))
+      .sort((a, b) => monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month));
+  }, [records]);
+
+  const bpSeverityData = useMemo(() => {
+    const counts = new Map<string, number>([
+      ['Normal', 0],
+      ['Elevated', 0],
+      ['Stage 1', 0],
+      ['Stage 2', 0],
+      ['Critical', 0],
+    ]);
+
+    records.forEach((record) => {
+      if (record.Systolic_BP >= 180 || record.Diastolic_BP >= 120) counts.set('Critical', (counts.get('Critical') ?? 0) + 1);
+      else if (record.Systolic_BP >= 140 || record.Diastolic_BP >= 90) counts.set('Stage 2', (counts.get('Stage 2') ?? 0) + 1);
+      else if (record.Systolic_BP >= 130 || record.Diastolic_BP >= 80) counts.set('Stage 1', (counts.get('Stage 1') ?? 0) + 1);
+      else if (record.Systolic_BP >= 120) counts.set('Elevated', (counts.get('Elevated') ?? 0) + 1);
+      else counts.set('Normal', (counts.get('Normal') ?? 0) + 1);
+    });
+
+    return Array.from(counts.entries()).map(([category, count]) => ({ category, count }));
+  }, [records]);
+
+  const heartRateData = useMemo(() => {
+    const grouped = new Map<string, number[]>();
+
+    records.forEach((record) => {
+      const values = grouped.get(record.Month) ?? [];
+      values.push(record.Heart_Rate_bpm);
+      grouped.set(record.Month, values);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([time, values]) => ({ time: time.slice(0, 3), month: time, avgHR: Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)) }))
+      .sort((a, b) => monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month));
+  }, [records]);
+
+  const clinicalRecords = useMemo(() => {
+    return [...records]
+      .map((record) => ({
+        id: record.id,
+        patient: record.EmployeeID_or_Guest,
+        bp: record.Blood_Pressure,
+        temp: `${record.Body_Temperature_C.toFixed(1)}°C`,
+        hr: `${record.Heart_Rate_bpm} bpm`,
+        risk: normalizeRiskLevel(record.Risk_Level),
+        status: record.Alert_Status,
+        date: recordDateLabel(record),
+      }))
+      .slice(0, 12);
+  }, [records]);
+
+  const criticalCount = clinicalRecords.filter((record) => record.risk === 'Critical').length;
+  const feverCount = records.filter((record) => record.Body_Temperature_C >= 37.5).length;
+  const highBpCount = records.filter((record) => record.Systolic_BP >= 140 || record.Diastolic_BP >= 90).length;
+  const elevatedHrCount = records.filter((record) => record.Heart_Rate_bpm >= 100).length;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Clinic Monitoring Dashboard</h1>
-          <p className="text-gray-600 mt-1">Healthcare personnel monitoring and critical case management</p>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Clinic Monitoring Dashboard</h1>
+        <p className="text-gray-600 mt-1">Healthcare personnel monitoring and critical case management</p>
       </div>
+
+      {error && <Card className="border border-red-200 bg-red-50 text-red-700">Unable to load clinic records: {error}</Card>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard
-          title="Red Flag Cases"
-          value="18"
-          icon={<AlertTriangle className="w-6 h-6" />}
-          trend="-22% from last week"
-          trendUp={true}
-          color="red"
-        />
-        <KPICard
-          title="Fever Cases"
-          value="42"
-          icon={<Thermometer className="w-6 h-6" />}
-          trend="+5 new today"
-          trendUp={false}
-          color="orange"
-        />
-        <KPICard
-          title="High BP Cases"
-          value="67"
-          icon={<Heart className="w-6 h-6" />}
-          trend="-8% improvement"
-          trendUp={true}
-          color="purple"
-        />
-        <KPICard
-          title="Elevated Heart Rate"
-          value="34"
-          icon={<Activity className="w-6 h-6" />}
-          color="teal"
-        />
+        <KPICard title="Red Flag Cases" value={loading ? '...' : criticalCount} icon={<AlertTriangle className="w-6 h-6" />} color="red" />
+        <KPICard title="Fever Cases" value={loading ? '...' : feverCount} icon={<Thermometer className="w-6 h-6" />} color="orange" />
+        <KPICard title="High BP Cases" value={loading ? '...' : highBpCount} icon={<Heart className="w-6 h-6" />} color="purple" />
+        <KPICard title="Elevated Heart Rate" value={loading ? '...' : elevatedHrCount} icon={<Activity className="w-6 h-6" />} color="teal" />
       </div>
-
-      <Card className="bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5 text-red-600" />
-          Priority Alerts
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl p-4 border-l-4 border-red-600">
-            <h4 className="text-sm font-semibold text-red-600 mb-1">Critical BP</h4>
-            <p className="text-2xl font-bold text-gray-900">18</p>
-            <p className="text-xs text-gray-600 mt-1">Requires immediate attention</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-l-4 border-orange-600">
-            <h4 className="text-sm font-semibold text-orange-600 mb-1">Fever Alerts</h4>
-            <p className="text-2xl font-bold text-gray-900">23</p>
-            <p className="text-xs text-gray-600 mt-1">Above 37.5°C</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-l-4 border-purple-600">
-            <h4 className="text-sm font-semibold text-purple-600 mb-1">Emergency Cases</h4>
-            <p className="text-2xl font-bold text-gray-900">5</p>
-            <p className="text-xs text-gray-600 mt-1">Active now</p>
-          </div>
-        </div>
-      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
@@ -114,7 +137,6 @@ export function ClinicMonitoringDashboard() {
               <XAxis dataKey="day" stroke="#6b7280" />
               <YAxis stroke="#6b7280" />
               <Tooltip />
-              <Legend />
               <Line type="monotone" dataKey="cases" stroke="#F59E0B" strokeWidth={2} dot={{ fill: '#F59E0B' }} />
             </LineChart>
           </ResponsiveContainer>
@@ -159,7 +181,7 @@ export function ClinicMonitoringDashboard() {
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Heart Rate</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Risk Level</th>
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Status</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Date & Time</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Date</th>
               </tr>
             </thead>
             <tbody>
@@ -170,15 +192,9 @@ export function ClinicMonitoringDashboard() {
                   <td className="py-3 px-4 text-sm text-gray-700">{record.temp}</td>
                   <td className="py-3 px-4 text-sm text-gray-700">{record.hr}</td>
                   <td className="py-3 px-4">
-                    <Badge variant={record.risk === 'Critical' ? 'danger' : record.risk === 'High' ? 'warning' : record.risk === 'Moderate' ? 'info' : 'success'}>
-                      {record.risk}
-                    </Badge>
+                    <Badge variant={riskVariant(record.risk)}>{record.risk}</Badge>
                   </td>
-                  <td className="py-3 px-4">
-                    <Badge variant={record.status === 'Urgent' ? 'danger' : record.status === 'Monitor' ? 'warning' : record.status === 'Follow-up' ? 'info' : 'success'}>
-                      {record.status}
-                    </Badge>
-                  </td>
+                  <td className="py-3 px-4 text-sm text-gray-700">{record.status}</td>
                   <td className="py-3 px-4 text-sm text-gray-600">{record.date}</td>
                 </tr>
               ))}

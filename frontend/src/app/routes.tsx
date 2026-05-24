@@ -10,6 +10,7 @@ import { GuidanceMonitoringDashboard } from "./pages/GuidanceMonitoringDashboard
 import { HRWellnessDashboard } from "./pages/HRWellnessDashboard";
 import { ReportsDashboard } from "./pages/ReportsDashboard";
 import { UserManagementDashboard } from "./pages/UserManagementDashboard";
+import { RecordUploadPage } from "./pages/RecordUploadPage";
 
 export const router = createBrowserRouter([
   {
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
       { path: "hr-wellness", Component: HRWellnessDashboard },
       { path: "reports", Component: ReportsDashboard },
       { path: "user-management", Component: UserManagementDashboard },
+      { path: "record-upload", Component: RecordUploadPage },
     ],
   },
 ]);

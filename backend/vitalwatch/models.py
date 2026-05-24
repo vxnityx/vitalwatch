@@ -1,0 +1,30 @@
+from django.db import models
+
+class StudentRecord(models.Model):
+    College = models.CharField(max_length=255)
+    Course = models.CharField(max_length=255)
+    Year_Level = models.IntegerField()
+    Month = models.CharField(max_length=255)
+    Day = models.IntegerField()
+    Year = models.IntegerField()	
+    StudentID = models.CharField(max_length=255)	
+    Body_Temperature_C = models.FloatField(max_length=255)
+    Blood_Pressure = models.CharField(max_length=255)
+    Heart_Rate_bpm = models.IntegerField()
+    Emotion = models.CharField(max_length=255)
+
+class FacultyRecord(models.Model):
+    College = models.CharField(max_length=255)
+    User_Type = models.CharField(max_length=255)
+    Month = models.CharField(max_length=255)
+    Day = models.IntegerField()
+    Year = models.IntegerField()
+    EmployeeID_or_Guest = models.CharField(max_length=255)
+    Body_Temperature_C = models.FloatField(max_length=255)
+    Blood_Pressure = models.CharField(max_length=255)
+    Systolic_BP = models.IntegerField()
+    Diastolic_BP = models.IntegerField()
+    Heart_Rate_bpm = models.IntegerField()
+    Emotion = models.CharField(max_length=255)
+    Risk_Level = models.CharField(max_length=255)
+    Alert_Status = models.CharField(max_length=255)

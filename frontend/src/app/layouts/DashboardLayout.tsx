@@ -8,6 +8,7 @@ import {
   Brain,
   UserCheck,
   FileText,
+  Upload,
   Users,
   Settings,
   LogOut,
@@ -27,6 +28,7 @@ const menuItems = [
   { path: '/dashboard/guidance-monitoring', label: 'Guidance Monitoring', icon: Brain },
   { path: '/dashboard/hr-wellness', label: 'HR Wellness', icon: UserCheck },
   { path: '/dashboard/reports', label: 'Reports', icon: FileText },
+  { path: '/dashboard/record-upload', label: 'Record Upload', icon: Upload },
   { path: '/dashboard/user-management', label: 'User Management', icon: Users },
 ];
 

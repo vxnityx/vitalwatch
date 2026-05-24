@@ -1,81 +1,158 @@
+import { useEffect, useMemo, useState } from 'react';
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { UserCheck, Heart, TrendingUp, AlertTriangle } from 'lucide-react';
 import { KPICard, Card } from '../components/Card';
 import { Badge } from '../components/Badge';
-import { UserCheck, Heart, TrendingUp, AlertTriangle } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { FacultyRecord, average, getWellnessScore, normalizeRiskLevel, recordDateLabel, wellnessApi } from '../api/wellnessApi';
 
-const wellnessTrendData = [
-  { month: 'Jan', wellness: 84 },
-  { month: 'Feb', wellness: 86 },
-  { month: 'Mar', wellness: 85 },
-  { month: 'Apr', wellness: 88 },
-  { month: 'May', wellness: 90 },
-];
+const riskColors: Record<string, string> = {
+  Normal: '#22C55E',
+  Moderate: '#F59E0B',
+  High: '#EF4444',
+  Critical: '#991B1B',
+};
 
-const departmentData = [
-  { dept: 'IT', wellness: 88, employees: 120 },
-  { dept: 'HR', wellness: 92, employees: 45 },
-  { dept: 'Finance', wellness: 85, employees: 80 },
-  { dept: 'Operations', wellness: 87, employees: 150 },
-  { dept: 'Marketing', wellness: 90, employees: 95 },
-  { dept: 'Legal', wellness: 89, employees: 35 },
-];
+const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-const riskDistributionData = [
-  { name: 'Normal', value: 720, color: '#22C55E' },
-  { name: 'Moderate', value: 85, color: '#F59E0B' },
-  { name: 'High', value: 22, color: '#EF4444' },
-  { name: 'Critical', value: 7, color: '#991B1B' },
-];
-
-const employeeMonitoring = [
-  { id: 1, name: 'Alice Johnson', dept: 'IT', bp: '125/82', temp: '36.7°C', wellness: '88%', risk: 'Normal', date: '2026-05-23' },
-  { id: 2, name: 'Bob Smith', dept: 'HR', bp: '138/88', temp: '36.9°C', wellness: '76%', risk: 'Moderate', date: '2026-05-23' },
-  { id: 3, name: 'Carol White', dept: 'Finance', bp: '145/95', temp: '37.2°C', wellness: '68%', risk: 'High', date: '2026-05-23' },
-  { id: 4, name: 'David Brown', dept: 'Operations', bp: '120/78', temp: '36.5°C', wellness: '92%', risk: 'Normal', date: '2026-05-23' },
-  { id: 5, name: 'Emma Davis', dept: 'Marketing', bp: '132/85', temp: '36.8°C', wellness: '85%', risk: 'Normal', date: '2026-05-23' },
-];
+function riskVariant(risk: string): 'danger' | 'warning' | 'success' {
+  if (risk === 'Critical' || risk === 'High') return 'danger';
+  if (risk === 'Moderate') return 'warning';
+  return 'success';
+}
 
 export function HRWellnessDashboard() {
+  const [records, setRecords] = useState<FacultyRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const facultyRecords = await wellnessApi.getFacultyRecords();
+        if (!cancelled) setRecords(facultyRecords);
+      } catch (fetchError) {
+        if (!cancelled) {
+          setError(fetchError instanceof Error ? fetchError.message : 'Failed to load HR wellness data.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const wellnessTrendData = useMemo(() => {
+    const grouped = new Map<string, number[]>();
+
+    records.forEach((record) => {
+      const score = getWellnessScore({
+        temperature: record.Body_Temperature_C,
+        systolic: record.Systolic_BP,
+        diastolic: record.Diastolic_BP,
+        heartRate: record.Heart_Rate_bpm,
+        emotion: record.Emotion,
+      });
+      const values = grouped.get(record.Month) ?? [];
+      values.push(score);
+      grouped.set(record.Month, values);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([month, values]) => ({ month: month.slice(0, 3), monthFull: month, wellness: Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)) }))
+      .sort((a, b) => monthOrder.indexOf(a.monthFull) - monthOrder.indexOf(b.monthFull));
+  }, [records]);
+
+  const departmentData = useMemo(() => {
+    const grouped = new Map<string, { scores: number[]; employees: number }>();
+
+    records.forEach((record) => {
+      const score = getWellnessScore({
+        temperature: record.Body_Temperature_C,
+        systolic: record.Systolic_BP,
+        diastolic: record.Diastolic_BP,
+        heartRate: record.Heart_Rate_bpm,
+        emotion: record.Emotion,
+      });
+      const key = record.College || 'Unknown';
+      const current = grouped.get(key) ?? { scores: [], employees: 0 };
+      current.scores.push(score);
+      current.employees += 1;
+      grouped.set(key, current);
+    });
+
+    return Array.from(grouped.entries()).map(([dept, data]) => ({
+      dept: dept.length > 18 ? `${dept.slice(0, 18)}...` : dept,
+      wellness: Number((data.scores.reduce((a, b) => a + b, 0) / data.scores.length).toFixed(1)),
+      employees: data.employees,
+    }));
+  }, [records]);
+
+  const riskDistributionData = useMemo(() => {
+    const counts = new Map<string, number>([
+      ['Normal', 0],
+      ['Moderate', 0],
+      ['High', 0],
+      ['Critical', 0],
+    ]);
+
+    records.forEach((record) => {
+      const risk = normalizeRiskLevel(record.Risk_Level);
+      counts.set(risk, (counts.get(risk) ?? 0) + 1);
+    });
+
+    return Array.from(counts.entries()).map(([name, value]) => ({ name, value, color: riskColors[name] }));
+  }, [records]);
+
+  const employeeMonitoring = useMemo(() => {
+    return records.slice(0, 12).map((record) => {
+      const score = getWellnessScore({
+        temperature: record.Body_Temperature_C,
+        systolic: record.Systolic_BP,
+        diastolic: record.Diastolic_BP,
+        heartRate: record.Heart_Rate_bpm,
+        emotion: record.Emotion,
+      });
+
+      return {
+        id: record.id,
+        name: record.EmployeeID_or_Guest,
+        dept: record.College,
+        bp: record.Blood_Pressure,
+        temp: `${record.Body_Temperature_C.toFixed(1)}°C`,
+        wellness: `${score.toFixed(0)}%`,
+        risk: normalizeRiskLevel(record.Risk_Level),
+        date: recordDateLabel(record),
+      };
+    });
+  }, [records]);
+
+  const elevatedBpTracking = records.filter((record) => record.Systolic_BP >= 130 || record.Diastolic_BP >= 85).length;
+  const wellnessIndex = average(wellnessTrendData.map((item) => item.wellness));
+  const activeCases = riskDistributionData.filter((item) => item.name === 'High' || item.name === 'Critical').reduce((total, item) => total + item.value, 0);
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">HR Wellness Dashboard</h1>
-          <p className="text-gray-600 mt-1">Employee wellness management and tracking</p>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">HR Wellness Dashboard</h1>
+        <p className="text-gray-600 mt-1">Employee wellness management and tracking</p>
       </div>
 
+      {error && <Card className="border border-red-200 bg-red-50 text-red-700">Unable to load HR wellness data: {error}</Card>}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard
-          title="Employee Health Analytics"
-          value="834"
-          icon={<UserCheck className="w-6 h-6" />}
-          trend="+12 new this week"
-          trendUp={true}
-          color="blue"
-        />
-        <KPICard
-          title="Elevated BP Tracking"
-          value="29"
-          icon={<Heart className="w-6 h-6" />}
-          trend="-15% from last month"
-          trendUp={true}
-          color="red"
-        />
-        <KPICard
-          title="Wellness Index"
-          value="89.5%"
-          icon={<TrendingUp className="w-6 h-6" />}
-          trend="+3.2% improvement"
-          trendUp={true}
-          color="emerald"
-        />
-        <KPICard
-          title="Active Cases"
-          value="22"
-          icon={<AlertTriangle className="w-6 h-6" />}
-          color="orange"
-        />
+        <KPICard title="Employee Health Analytics" value={loading ? '...' : records.length} icon={<UserCheck className="w-6 h-6" />} color="blue" />
+        <KPICard title="Elevated BP Tracking" value={loading ? '...' : elevatedBpTracking} icon={<Heart className="w-6 h-6" />} color="red" />
+        <KPICard title="Wellness Index" value={loading ? '...' : `${wellnessIndex.toFixed(1)}%`} icon={<TrendingUp className="w-6 h-6" />} color="emerald" />
+        <KPICard title="Active Cases" value={loading ? '...' : activeCases} icon={<AlertTriangle className="w-6 h-6" />} color="orange" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -85,7 +162,7 @@ export function HRWellnessDashboard() {
             <BarChart data={departmentData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="dept" stroke="#6b7280" angle={-15} textAnchor="end" height={80} />
-              <YAxis stroke="#6b7280" />
+              <YAxis stroke="#6b7280" domain={[0, 100]} />
               <Tooltip />
               <Bar dataKey="wellness" fill="#0F6CBD" radius={[8, 8, 0, 0]} />
             </BarChart>
@@ -98,7 +175,7 @@ export function HRWellnessDashboard() {
             <LineChart data={wellnessTrendData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" stroke="#6b7280" />
-              <YAxis stroke="#6b7280" />
+              <YAxis stroke="#6b7280" domain={[0, 100]} />
               <Tooltip />
               <Legend />
               <Line type="monotone" dataKey="wellness" stroke="#14B8A6" strokeWidth={2} dot={{ fill: '#14B8A6' }} />
@@ -109,34 +186,16 @@ export function HRWellnessDashboard() {
 
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Risk-Level Distribution</h3>
-        <div className="flex items-center justify-center">
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={riskDistributionData}
-                cx="50%"
-                cy="50%"
-                innerRadius={70}
-                outerRadius={110}
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {riskDistributionData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="grid grid-cols-4 gap-4 mt-4">
-          {riskDistributionData.map((item, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-              <span className="text-sm text-gray-700">{item.name}: {item.value}</span>
-            </div>
-          ))}
-        </div>
+        <ResponsiveContainer width="100%" height={300}>
+          <PieChart>
+            <Pie data={riskDistributionData} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={3} dataKey="value">
+              {riskDistributionData.map((entry, index) => (
+                <Cell key={`risk-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip />
+          </PieChart>
+        </ResponsiveContainer>
       </Card>
 
       <Card>
@@ -162,9 +221,7 @@ export function HRWellnessDashboard() {
                   <td className="py-3 px-4 text-sm text-gray-700">{employee.temp}</td>
                   <td className="py-3 px-4 text-sm text-gray-700">{employee.wellness}</td>
                   <td className="py-3 px-4">
-                    <Badge variant={employee.risk === 'High' ? 'danger' : employee.risk === 'Moderate' ? 'warning' : 'success'}>
-                      {employee.risk}
-                    </Badge>
+                    <Badge variant={riskVariant(employee.risk)}>{employee.risk}</Badge>
                   </td>
                 </tr>
               ))}
