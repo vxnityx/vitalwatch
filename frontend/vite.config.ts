@@ -31,6 +31,10 @@ export default defineConfig({
     },
   },
 
+  preview: {
+    allowedHosts: ['vitalwatch-production-c0a4.up.railway.app'],
+  },
+
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })
