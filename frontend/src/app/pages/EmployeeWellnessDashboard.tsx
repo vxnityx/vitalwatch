@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Briefcase, AlertTriangle, TrendingUp, Heart } from 'lucide-react';
+import { Briefcase, AlertTriangle, TrendingUp, Heart, Users } from 'lucide-react';
 import { KPICard, Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import {
@@ -30,6 +30,11 @@ function riskVariant(risk: string): 'danger' | 'warning' | 'success' {
 
 export function EmployeeWellnessDashboard() {
   const [records, setRecords] = useState<FacultyRecord[]>([]);
+  const [selectedCollege, setSelectedCollege] = useState<string>('All Colleges');
+  const [selectedUserType, setSelectedUserType] = useState<string>('All User Types');
+  const [selectedMonth, setSelectedMonth] = useState<string>('All Months');
+  const [selectedRisk, setSelectedRisk] = useState<string>('All Risk Levels');
+  const [selectedAlertStatus, setSelectedAlertStatus] = useState<string>('All Alert Status');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +45,14 @@ export function EmployeeWellnessDashboard() {
       try {
         setLoading(true);
         setError(null);
-        const facultyRecords = await wellnessApi.getFacultyRecords();
+        const params: Record<string, string | number> = {};
+        if (selectedCollege !== 'All Colleges') params.college = selectedCollege;
+        if (selectedUserType !== 'All User Types') params.user_type = selectedUserType;
+        if (selectedMonth !== 'All Months') params.month = selectedMonth;
+        if (selectedRisk !== 'All Risk Levels') params.risk_level = selectedRisk;
+        if (selectedAlertStatus !== 'All Alert Status') params.alert_status = selectedAlertStatus;
+
+        const facultyRecords = await wellnessApi.getFacultyRecords(Object.keys(params).length ? params : undefined);
         if (!cancelled) {
           setRecords(facultyRecords);
         }
@@ -85,51 +97,45 @@ export function EmployeeWellnessDashboard() {
       .sort((a, b) => monthOrder.indexOf(a.monthFull) - monthOrder.indexOf(b.monthFull));
   }, [records]);
 
+  const filteredRecords = records;
+
   const departmentData = useMemo(() => {
-    const grouped = new Map<string, number[]>();
+    const grouped = new Map<string, number>();
 
-    records.forEach((record) => {
-      const wellness = getWellnessScore({
-        temperature: record.Body_Temperature_C,
-        systolic: record.Systolic_BP,
-        diastolic: record.Diastolic_BP,
-        heartRate: record.Heart_Rate_bpm,
-        emotion: record.Emotion,
-      });
-
+    filteredRecords.forEach((record) => {
       const key = record.College || 'Unknown';
-      const values = grouped.get(key) ?? [];
-      values.push(wellness);
-      grouped.set(key, values);
+      grouped.set(key, (grouped.get(key) ?? 0) + 1);
     });
 
     return Array.from(grouped.entries())
-      .map(([dept, values]) => ({ dept: dept.length > 18 ? `${dept.slice(0, 18)}...` : dept, wellness: Number(average(values).toFixed(1)) }))
-      .sort((a, b) => b.wellness - a.wellness);
-  }, [records]);
+      .map(([dept, count]) => ({ dept: dept.length > 18 ? `${dept.slice(0, 18)}...` : dept, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [filteredRecords]);
 
   const riskData = useMemo(() => {
     const counts = new Map<string, number>([
-      ['Normal', 0],
-      ['Moderate', 0],
-      ['High', 0],
-      ['Critical', 0],
+      ['Elevated', 0], // map to Moderate
+      ['Red Flag', 0], // map to High + Critical
+      ['Normal to Mild', 0], // map to Normal
     ]);
 
-    records.forEach((record) => {
-      const normalized = normalizeRiskLevel(record.Risk_Level);
-      counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+    filteredRecords.forEach((record) => {
+      const norm = normalizeRiskLevel(record.Risk_Level);
+      if (norm === 'Moderate') counts.set('Elevated', (counts.get('Elevated') ?? 0) + 1);
+      else if (norm === 'High' || norm === 'Critical') counts.set('Red Flag', (counts.get('Red Flag') ?? 0) + 1);
+      else counts.set('Normal to Mild', (counts.get('Normal to Mild') ?? 0) + 1);
     });
 
-    return Array.from(counts.entries()).map(([name, value]) => ({
-      name,
-      value,
-      color: riskColors[name],
-    }));
+    return [
+      { name: 'Elevated', value: counts.get('Elevated') ?? 0, color: '#F59E0B' },
+      { name: 'Red Flag', value: counts.get('Red Flag') ?? 0, color: '#EF4444' },
+      { name: 'Normal to Mild', value: counts.get('Normal to Mild') ?? 0, color: '#22C55E' },
+    ];
   }, [records]);
 
   const employeeRecords = useMemo(() => {
-    return records.slice(0, 12).map((record) => ({
+    return filteredRecords.slice(0, 12).map((record) => ({
       id: record.id,
       name: record.EmployeeID_or_Guest,
       dept: record.College,
@@ -139,22 +145,22 @@ export function EmployeeWellnessDashboard() {
       risk: normalizeRiskLevel(record.Risk_Level),
       date: recordDateLabel(record),
     }));
-  }, [records]);
+  }, [filteredRecords]);
 
   const elevatedCases = useMemo(() => {
-    return records.filter((record) => {
+    return filteredRecords.filter((record) => {
       const bp = parseBloodPressure(record.Blood_Pressure);
       return (bp?.systolic ?? record.Systolic_BP) >= 130 || (bp?.diastolic ?? record.Diastolic_BP) >= 85;
     }).length;
-  }, [records]);
+  }, [filteredRecords]);
 
-  const emotionalCases = records.filter((record) => {
+  const emotionalCases = filteredRecords.filter((record) => {
     const emotion = record.Emotion.toLowerCase();
     return emotion.includes('stress') || emotion.includes('angry') || emotion.includes('sad');
   }).length;
 
   const wellnessScore = average(
-    records.map((record) =>
+    filteredRecords.map((record) =>
       getWellnessScore({
         temperature: record.Body_Temperature_C,
         systolic: record.Systolic_BP,
@@ -164,6 +170,67 @@ export function EmployeeWellnessDashboard() {
       }),
     ),
   );
+
+  // KPIs
+  const totalRecords = filteredRecords.length;
+  const uniqueEmployees = new Set(filteredRecords.map((r) => r.EmployeeID_or_Guest)).size;
+  const avgTemperature = average(filteredRecords.map((r) => r.Body_Temperature_C));
+  const avgHeartRate = average(filteredRecords.map((r) => r.Heart_Rate_bpm));
+  const highTempCount = filteredRecords.filter((r) => r.Body_Temperature_C >= 37.5).length;
+  const abnormalHrCount = filteredRecords.filter((r) => r.Heart_Rate_bpm < 60 || r.Heart_Rate_bpm > 100).length;
+  const immediateAttentionCount = filteredRecords.filter((r) => (r.Alert_Status ?? '').toLowerCase().includes('immediate')).length;
+
+  const alertStatusData = useMemo(() => {
+    const counts = new Map<string, number>([
+      ['For Monitoring', 0],
+      ['Needs Immediate Attention', 0],
+      ['No Immediate Alert', 0],
+    ]);
+
+    filteredRecords.forEach((r) => {
+      const s = (r.Alert_Status ?? '').toLowerCase();
+      if (s.includes('immediate') || s.includes('needs')) counts.set('Needs Immediate Attention', (counts.get('Needs Immediate Attention') ?? 0) + 1);
+      else if (s.includes('monitor')) counts.set('For Monitoring', (counts.get('For Monitoring') ?? 0) + 1);
+      else counts.set('No Immediate Alert', (counts.get('No Immediate Alert') ?? 0) + 1);
+    });
+
+    return [
+      { name: 'For Monitoring', value: counts.get('For Monitoring') ?? 0 },
+      { name: 'Needs Immediate Attention', value: counts.get('Needs Immediate Attention') ?? 0 },
+      { name: 'No Immediate Alert', value: counts.get('No Immediate Alert') ?? 0 },
+    ];
+  }, [filteredRecords]);
+
+  const comparisonWithOtherColleges = useMemo(() => {
+    const grouped = new Map<string, { totalRecords: number; unique: Set<string>; temps: number[]; heartRates: number[]; highTemp: number; abnormalHr: number; elevatedBp: number; immediateAlerts: number }>();
+
+    filteredRecords.forEach((r) => {
+      const college = r.College || 'Unknown';
+      const cur = grouped.get(college) ?? { totalRecords: 0, unique: new Set<string>(), temps: [], heartRates: [], highTemp: 0, abnormalHr: 0, elevatedBp: 0, immediateAlerts: 0 };
+      cur.totalRecords += 1;
+      cur.unique.add(r.EmployeeID_or_Guest);
+      cur.temps.push(r.Body_Temperature_C);
+      cur.heartRates.push(r.Heart_Rate_bpm);
+      if (r.Body_Temperature_C >= 37.5) cur.highTemp += 1;
+      if (r.Heart_Rate_bpm < 60 || r.Heart_Rate_bpm > 100) cur.abnormalHr += 1;
+      const bp = parseBloodPressure(r.Blood_Pressure);
+      if ((bp?.systolic ?? r.Systolic_BP) >= 130 || (bp?.diastolic ?? r.Diastolic_BP) >= 85) cur.elevatedBp += 1;
+      if ((r.Alert_Status ?? '').toLowerCase().includes('immediate')) cur.immediateAlerts += 1;
+      grouped.set(college, cur);
+    });
+
+    return Array.from(grouped.entries()).map(([college, data]) => ({
+      college,
+      totalRecords: data.totalRecords,
+      uniqueEmployees: data.unique.size,
+      avgTemp: Number(average(data.temps).toFixed(2)),
+      avgHeartRate: Number(average(data.heartRates).toFixed(2)),
+      highTempCases: data.highTemp,
+      abnormalHrCases: data.abnormalHr,
+      elevatedBpCases: data.elevatedBp,
+      immediateAlerts: data.immediateAlerts,
+    }));
+  }, [filteredRecords]);
 
   return (
     <div className="space-y-6">
@@ -180,11 +247,49 @@ export function EmployeeWellnessDashboard() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Total Wellness Records" value={loading ? '...' : records.length} icon={<Briefcase className="w-6 h-6" />} color="blue" />
-        <KPICard title="Elevated BP Cases" value={loading ? '...' : elevatedCases} icon={<Heart className="w-6 h-6" />} color="red" />
-        <KPICard title="Emotional Wellness" value={loading ? '...' : emotionalCases} icon={<AlertTriangle className="w-6 h-6" />} color="orange" />
-        <KPICard title="Wellness Score" value={loading ? '...' : `${wellnessScore.toFixed(1)}%`} icon={<TrendingUp className="w-6 h-6" />} color="emerald" />
+      <div className="flex gap-3 items-center">
+        <select value={selectedCollege} onChange={(e) => setSelectedCollege(e.target.value)} className="p-2 border rounded">
+          <option>All Colleges</option>
+          {[...new Set(records.map((r) => r.College || 'Unknown'))].map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        <select value={selectedUserType} onChange={(e) => setSelectedUserType(e.target.value)} className="p-2 border rounded">
+          <option>All User Types</option>
+          {[...new Set(records.map((r) => r.User_Type || 'Unknown'))].map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="p-2 border rounded">
+          <option>All Months</option>
+          {[...new Set(records.map((r) => r.Month || 'Unknown'))].map((m) => (
+            <option key={m}>{m}</option>
+          ))}
+        </select>
+        <select value={selectedRisk} onChange={(e) => setSelectedRisk(e.target.value)} className="p-2 border rounded">
+          <option>All Risk Levels</option>
+          <option>Normal</option>
+          <option>Moderate</option>
+          <option>High</option>
+          <option>Critical</option>
+        </select>
+        <select value={selectedAlertStatus} onChange={(e) => setSelectedAlertStatus(e.target.value)} className="p-2 border rounded">
+          <option>All Alert Status</option>
+          <option>For Monitoring</option>
+          <option>Needs Immediate Attention</option>
+          <option>No Immediate Alert</option>
+        </select>
+        <button onClick={() => { setSelectedCollege('All Colleges'); setSelectedUserType('All User Types'); setSelectedMonth('All Months'); setSelectedRisk('All Risk Levels'); setSelectedAlertStatus('All Alert Status'); }} className="ml-2 px-3 py-2 bg-gray-100 rounded">Reset</button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+        <KPICard title="Total Records" value={loading ? '...' : totalRecords} icon={<Briefcase className="w-6 h-6" />} color="blue" />
+        <KPICard title="Unique Employees/Guests" value={loading ? '...' : uniqueEmployees} icon={<Users className="w-6 h-6" />} color="teal" />
+        <KPICard title="Average Temperature" value={loading ? '...' : `${avgTemperature.toFixed(2)} °C`} icon={<Heart className="w-6 h-6" />} color="emerald" />
+        <KPICard title="Average Heart Rate" value={loading ? '...' : `${avgHeartRate.toFixed(2)} bpm`} icon={<Heart className="w-6 h-6" />} color="orange" />
+        <KPICard title="High Temperature" value={loading ? '...' : highTempCount} icon={<AlertTriangle className="w-6 h-6" />} color="red" />
+        <KPICard title="Abnormal Heart Rate" value={loading ? '...' : abnormalHrCount} icon={<AlertTriangle className="w-6 h-6" />} color="red" />
+        <KPICard title="Immediate Attention" value={loading ? '...' : immediateAttentionCount} icon={<AlertTriangle className="w-6 h-6" />} color="red" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

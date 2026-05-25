@@ -17,6 +17,27 @@ class StudentRecordListCreateAPIView(ListCreateAPIView):
     queryset = StudentRecord.objects.all()
     serializer_class = StudentRecordSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        college = self.request.GET.get('college')
+        course = self.request.GET.get('course')
+        month = self.request.GET.get('month')
+        year_level = self.request.GET.get('year_level')
+
+        if college:
+            qs = qs.filter(College__iexact=college)
+        if course:
+            qs = qs.filter(Course__iexact=course)
+        if month:
+            qs = qs.filter(Month__iexact=month)
+        if year_level:
+            try:
+                qs = qs.filter(Year_Level=int(year_level))
+            except ValueError:
+                pass
+
+        return qs
+
 
 class StudentRecordRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
     queryset = StudentRecord.objects.all()
@@ -26,6 +47,27 @@ class StudentRecordRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
 class FacultyRecordListCreateAPIView(ListCreateAPIView):
     queryset = FacultyRecord.objects.all()
     serializer_class = FacultyRecordSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        college = self.request.GET.get('college')
+        user_type = self.request.GET.get('user_type')
+        month = self.request.GET.get('month')
+        risk_level = self.request.GET.get('risk_level')
+        alert_status = self.request.GET.get('alert_status')
+
+        if college:
+            qs = qs.filter(College__iexact=college)
+        if user_type:
+            qs = qs.filter(User_Type__iexact=user_type)
+        if month:
+            qs = qs.filter(Month__iexact=month)
+        if risk_level:
+            qs = qs.filter(Risk_Level__iexact=risk_level)
+        if alert_status:
+            qs = qs.filter(Alert_Status__icontains=alert_status)
+
+        return qs
 
 
 class FacultyRecordRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):

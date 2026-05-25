@@ -1,21 +1,140 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Thermometer, Heart, Activity, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Thermometer, Heart, Activity } from 'lucide-react';
 import { KPICard, Card } from '../components/Card';
-import { Badge } from '../components/Badge';
-import { FacultyRecord, normalizeRiskLevel, recordDateLabel, wellnessApi } from '../api/wellnessApi';
+import { StudentRecord, FacultyRecord, wellnessApi } from '../api/wellnessApi';
 
-function riskVariant(risk: string): 'danger' | 'warning' | 'info' | 'success' {
-  if (risk === 'Critical') return 'danger';
-  if (risk === 'High') return 'warning';
-  if (risk === 'Moderate') return 'info';
-  return 'success';
+function parseBloodPressure(bp: string): { systolic: number; diastolic: number } | null {
+  const [systolicRaw, diastolicRaw] = bp.split('/');
+  const systolic = Number(systolicRaw);
+  const diastolic = Number(diastolicRaw);
+
+  if (Number.isNaN(systolic) || Number.isNaN(diastolic)) {
+    return null;
+  }
+
+  return { systolic, diastolic };
 }
 
-const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function isStudentRedFlag(record: StudentRecord): boolean {
+  const bloodPressure = parseBloodPressure(record.Blood_Pressure);
+  const systolic = bloodPressure?.systolic ?? 0;
+  const diastolic = bloodPressure?.diastolic ?? 0;
+
+  return (
+    record.Body_Temperature_C >= 37.8 ||
+    record.Heart_Rate_bpm < 60 ||
+    record.Heart_Rate_bpm > 100 ||
+    systolic >= 130 ||
+    diastolic >= 85
+  );
+}
+
+function isStudentFever(record: StudentRecord): boolean {
+  return record.Body_Temperature_C >= 37.8;
+}
+
+function isStudentHighBp(record: StudentRecord): boolean {
+  const bloodPressure = parseBloodPressure(record.Blood_Pressure);
+  return (bloodPressure?.systolic ?? 0) >= 130 || (bloodPressure?.diastolic ?? 0) >= 85;
+}
+
+function isStudentHighHr(record: StudentRecord): boolean {
+  return record.Heart_Rate_bpm < 60 || record.Heart_Rate_bpm > 100;
+}
+
+function isEmployeeRedFlag(record: FacultyRecord): boolean {
+  return (
+    record.Body_Temperature_C >= 37.8 ||
+    record.Heart_Rate_bpm < 60 ||
+    record.Heart_Rate_bpm > 100 ||
+    record.Systolic_BP >= 130 ||
+    record.Diastolic_BP >= 85
+  );
+}
+
+function isEmployeeFever(record: FacultyRecord): boolean {
+  return record.Body_Temperature_C >= 37.8;
+}
+
+function isEmployeeHighBp(record: FacultyRecord): boolean {
+  return record.Systolic_BP >= 130 || record.Diastolic_BP >= 85;
+}
+
+function isEmployeeHighHr(record: FacultyRecord): boolean {
+  return record.Heart_Rate_bpm < 60 || record.Heart_Rate_bpm > 100;
+}
+
+type TopCaseCard = {
+  title: string;
+  value: number;
+  label: string;
+  color: 'red' | 'orange' | 'purple' | 'teal' | 'blue';
+};
+
+type SummaryRow = {
+  college: string;
+  subgroup: string;
+  totalCases: number;
+};
+
+function aggregateSummary<T>(
+  records: T[],
+  predicate: (record: T) => boolean,
+  collegeSelector: (record: T) => string,
+  subgroupSelector: (record: T) => string,
+): SummaryRow[] {
+  const grouped = new Map<string, SummaryRow>();
+
+  records.forEach((record) => {
+    if (!predicate(record)) return;
+    const college = collegeSelector(record) || 'Unknown';
+    const subgroup = subgroupSelector(record) || 'Unknown';
+    const key = `${college}||${subgroup}`;
+    const current = grouped.get(key) ?? { college, subgroup, totalCases: 0 };
+    current.totalCases += 1;
+    grouped.set(key, current);
+  });
+
+  return Array.from(grouped.values()).sort((a, b) => b.totalCases - a.totalCases).slice(0, 6);
+}
+
+function highestSummary(rows: SummaryRow[]): { label: string; value: number } {
+  const top = rows[0];
+  if (!top) return { label: 'No cases', value: 0 };
+  return { label: `${top.college} - ${top.subgroup}`, value: top.totalCases };
+}
+
+function SummaryTable({ title, rows, columns }: { title: string; rows: SummaryRow[]; columns: [string, string, string] }) {
+  return (
+    <Card>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-200">
+              <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{columns[0]}</th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{columns[1]}</th>
+              <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{columns[2]}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={`${row.college}-${row.subgroup}`} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <td className="py-3 px-4 text-sm text-gray-900">{row.college}</td>
+                <td className="py-3 px-4 text-sm text-gray-700">{row.subgroup}</td>
+                <td className="py-3 px-4 text-sm text-gray-700">{row.totalCases}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
 
 export function ClinicMonitoringDashboard() {
-  const [records, setRecords] = useState<FacultyRecord[]>([]);
+  const [studentRecords, setStudentRecords] = useState<StudentRecord[]>([]);
+  const [employeeRecords, setEmployeeRecords] = useState<FacultyRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,8 +145,15 @@ export function ClinicMonitoringDashboard() {
       try {
         setLoading(true);
         setError(null);
-        const facultyRecords = await wellnessApi.getFacultyRecords();
-        if (!cancelled) setRecords(facultyRecords);
+        const [students, employees] = await Promise.all([
+          wellnessApi.getStudentRecords(),
+          wellnessApi.getFacultyRecords(),
+        ]);
+
+        if (!cancelled) {
+          setStudentRecords(students);
+          setEmployeeRecords(employees);
+        }
       } catch (fetchError) {
         if (!cancelled) {
           setError(fetchError instanceof Error ? fetchError.message : 'Failed to load clinic records.');
@@ -44,162 +170,140 @@ export function ClinicMonitoringDashboard() {
     };
   }, []);
 
-  const feverTrendData = useMemo(() => {
-    const grouped = new Map<string, number>();
+  const studentRedFlagRows = useMemo(
+    () => aggregateSummary(studentRecords, isStudentRedFlag, (r) => r.College, (r) => r.Course),
+    [studentRecords],
+  );
+  const studentFeverRows = useMemo(
+    () => aggregateSummary(studentRecords, isStudentFever, (r) => r.College, (r) => r.Course),
+    [studentRecords],
+  );
+  const studentBpRows = useMemo(
+    () => aggregateSummary(studentRecords, isStudentHighBp, (r) => r.College, (r) => r.Course),
+    [studentRecords],
+  );
+  const studentHrRows = useMemo(
+    () => aggregateSummary(studentRecords, isStudentHighHr, (r) => r.College, (r) => r.Course),
+    [studentRecords],
+  );
 
-    records.forEach((record) => {
-      if (record.Body_Temperature_C < 37.5) return;
-      const key = record.Month;
-      grouped.set(key, (grouped.get(key) ?? 0) + 1);
-    });
+  const employeeRedFlagRows = useMemo(
+    () => aggregateSummary(employeeRecords, isEmployeeRedFlag, (r) => r.College, (r) => r.User_Type),
+    [employeeRecords],
+  );
+  const employeeFeverRows = useMemo(
+    () => aggregateSummary(employeeRecords, isEmployeeFever, (r) => r.College, (r) => r.User_Type),
+    [employeeRecords],
+  );
+  const employeeBpRows = useMemo(
+    () => aggregateSummary(employeeRecords, isEmployeeHighBp, (r) => r.College, (r) => r.User_Type),
+    [employeeRecords],
+  );
+  const employeeHrRows = useMemo(
+    () => aggregateSummary(employeeRecords, isEmployeeHighHr, (r) => r.College, (r) => r.User_Type),
+    [employeeRecords],
+  );
 
-    return Array.from(grouped.entries())
-      .map(([day, cases]) => ({ day: day.slice(0, 3), month: day, cases }))
-      .sort((a, b) => monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month));
-  }, [records]);
-
-  const bpSeverityData = useMemo(() => {
-    const counts = new Map<string, number>([
-      ['Normal', 0],
-      ['Elevated', 0],
-      ['Stage 1', 0],
-      ['Stage 2', 0],
-      ['Critical', 0],
-    ]);
-
-    records.forEach((record) => {
-      if (record.Systolic_BP >= 180 || record.Diastolic_BP >= 120) counts.set('Critical', (counts.get('Critical') ?? 0) + 1);
-      else if (record.Systolic_BP >= 140 || record.Diastolic_BP >= 90) counts.set('Stage 2', (counts.get('Stage 2') ?? 0) + 1);
-      else if (record.Systolic_BP >= 130 || record.Diastolic_BP >= 80) counts.set('Stage 1', (counts.get('Stage 1') ?? 0) + 1);
-      else if (record.Systolic_BP >= 120) counts.set('Elevated', (counts.get('Elevated') ?? 0) + 1);
-      else counts.set('Normal', (counts.get('Normal') ?? 0) + 1);
-    });
-
-    return Array.from(counts.entries()).map(([category, count]) => ({ category, count }));
-  }, [records]);
-
-  const heartRateData = useMemo(() => {
-    const grouped = new Map<string, number[]>();
-
-    records.forEach((record) => {
-      const values = grouped.get(record.Month) ?? [];
-      values.push(record.Heart_Rate_bpm);
-      grouped.set(record.Month, values);
-    });
-
-    return Array.from(grouped.entries())
-      .map(([time, values]) => ({ time: time.slice(0, 3), month: time, avgHR: Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)) }))
-      .sort((a, b) => monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month));
-  }, [records]);
-
-  const clinicalRecords = useMemo(() => {
-    return [...records]
-      .map((record) => ({
-        id: record.id,
-        patient: record.EmployeeID_or_Guest,
-        bp: record.Blood_Pressure,
-        temp: `${record.Body_Temperature_C.toFixed(1)}°C`,
-        hr: `${record.Heart_Rate_bpm} bpm`,
-        risk: normalizeRiskLevel(record.Risk_Level),
-        status: record.Alert_Status,
-        date: recordDateLabel(record),
-      }))
-      .slice(0, 12);
-  }, [records]);
-
-  const criticalCount = clinicalRecords.filter((record) => record.risk === 'Critical').length;
-  const feverCount = records.filter((record) => record.Body_Temperature_C >= 37.5).length;
-  const highBpCount = records.filter((record) => record.Systolic_BP >= 140 || record.Diastolic_BP >= 90).length;
-  const elevatedHrCount = records.filter((record) => record.Heart_Rate_bpm >= 100).length;
+  const topCards: TopCaseCard[] = [
+    {
+      title: 'Highest Student Red-Flag Cases',
+      ...highestSummary(studentRedFlagRows),
+      color: 'red',
+    },
+    {
+      title: 'Highest Employee Red-Flag Cases',
+      ...highestSummary(employeeRedFlagRows),
+      color: 'red',
+    },
+    {
+      title: 'Highest Student Fever Cases',
+      ...highestSummary(studentFeverRows),
+      color: 'orange',
+    },
+    {
+      title: 'Highest Employee Fever Cases',
+      ...highestSummary(employeeFeverRows),
+      color: 'orange',
+    },
+    {
+      title: 'Highest Student BP Cases',
+      ...highestSummary(studentBpRows),
+      color: 'purple',
+    },
+    {
+      title: 'Highest Employee BP Cases',
+      ...highestSummary(employeeBpRows),
+      color: 'purple',
+    },
+    {
+      title: 'Highest Student HR Cases',
+      ...highestSummary(studentHrRows),
+      color: 'teal',
+    },
+    {
+      title: 'Highest Employee HR Cases',
+      ...highestSummary(employeeHrRows),
+      color: 'teal',
+    },
+  ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Clinic Monitoring Dashboard</h1>
-        <p className="text-gray-600 mt-1">Healthcare personnel monitoring and critical case management</p>
+        <h1 className="text-3xl font-bold text-gray-900">Clinic Module</h1>
+        <p className="text-gray-600 mt-1">Clinic monitoring analytics organized separately for Students and Employees by College and Course/User Type.</p>
       </div>
 
       {error && <Card className="border border-red-200 bg-red-50 text-red-700">Unable to load clinic records: {error}</Card>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Red Flag Cases" value={loading ? '...' : criticalCount} icon={<AlertTriangle className="w-6 h-6" />} color="red" />
-        <KPICard title="Fever Cases" value={loading ? '...' : feverCount} icon={<Thermometer className="w-6 h-6" />} color="orange" />
-        <KPICard title="High BP Cases" value={loading ? '...' : highBpCount} icon={<Heart className="w-6 h-6" />} color="purple" />
-        <KPICard title="Elevated Heart Rate" value={loading ? '...' : elevatedHrCount} icon={<Activity className="w-6 h-6" />} color="teal" />
-      </div>
+      <Card>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Description of Red-Flag Cases</h3>
+        <p className="text-sm text-gray-700">
+          Red-flag cases refer to students or employees who exhibit abnormal physiological wellness indicators based on the collected USTP-VitalWatch+ monitoring data.
+        </p>
+        <p className="text-sm text-gray-700 mt-3">These cases are automatically identified based on the following indicators:</p>
+        <ul className="list-disc pl-6 mt-2 text-sm text-gray-700 space-y-1">
+          <li>Body temperature greater than or equal to 37.8°C</li>
+          <li>Heart rate below 60 bpm or above 100 bpm</li>
+          <li>Elevated blood pressure readings</li>
+        </ul>
+        <div className="mt-4 rounded-2xl border-l-4 border-orange-400 bg-orange-50 p-4 text-sm text-gray-700">
+          <strong>Highlight:</strong> The system highlights the colleges, courses, and employee groups with the highest number of red-flag cases for priority clinic monitoring and possible intervention.
+        </div>
+      </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Fever Trend Chart</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={feverTrendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="day" stroke="#6b7280" />
-              <YAxis stroke="#6b7280" />
-              <Tooltip />
-              <Line type="monotone" dataKey="cases" stroke="#F59E0B" strokeWidth={2} dot={{ fill: '#F59E0B' }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
-
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">BP Severity Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={bpSeverityData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="category" stroke="#6b7280" angle={-15} textAnchor="end" height={80} />
-              <YAxis stroke="#6b7280" />
-              <Tooltip />
-              <Bar dataKey="count" fill="#EF4444" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {topCards.map((card) => (
+          <KPICard
+            key={card.title}
+            title={card.title}
+            value={loading ? '...' : card.value}
+            trend={card.label}
+            icon={card.color === 'red' ? <AlertTriangle className="w-6 h-6" /> : card.color === 'orange' ? <Thermometer className="w-6 h-6" /> : card.color === 'purple' ? <Heart className="w-6 h-6" /> : <Activity className="w-6 h-6" />}
+            color={card.color}
+          />
+        ))}
       </div>
 
       <Card>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Heart Rate Monitoring</h3>
-        <ResponsiveContainer width="100%" height={250}>
-          <LineChart data={heartRateData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="time" stroke="#6b7280" />
-            <YAxis stroke="#6b7280" />
-            <Tooltip />
-            <Line type="monotone" dataKey="avgHR" stroke="#14B8A6" strokeWidth={2} dot={{ fill: '#14B8A6' }} />
-          </LineChart>
-        </ResponsiveContainer>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Student Clinic Monitoring</h2>
+        <p className="text-sm text-gray-600 mb-6">Student cases are organized by College and Course.</p>
+        <div className="space-y-6">
+          <SummaryTable title="Student Red-Flag Cases" rows={studentRedFlagRows} columns={["College", "Course", "Total Cases"]} />
+          <SummaryTable title="Student Fever Monitoring" rows={studentFeverRows} columns={["College", "Course", "Total Cases"]} />
+          <SummaryTable title="Student High Blood Pressure Cases" rows={studentBpRows} columns={["College", "Course", "Total Cases"]} />
+          <SummaryTable title="Student Elevated Heart Monitoring" rows={studentHrRows} columns={["College", "Course", "Total Cases"]} />
+        </div>
       </Card>
 
       <Card>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Clinical Records</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Patient</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Blood Pressure</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Temperature</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Heart Rate</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Risk Level</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Status</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clinicalRecords.map((record) => (
-                <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="py-3 px-4 text-sm font-medium text-gray-900">{record.patient}</td>
-                  <td className="py-3 px-4 text-sm text-gray-700">{record.bp}</td>
-                  <td className="py-3 px-4 text-sm text-gray-700">{record.temp}</td>
-                  <td className="py-3 px-4 text-sm text-gray-700">{record.hr}</td>
-                  <td className="py-3 px-4">
-                    <Badge variant={riskVariant(record.risk)}>{record.risk}</Badge>
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-700">{record.status}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{record.date}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Employee Clinic Monitoring</h2>
+        <p className="text-sm text-gray-600 mb-6">Employee cases are organized by College and User Type.</p>
+        <div className="space-y-6">
+          <SummaryTable title="Employee Red-Flag Cases" rows={employeeRedFlagRows} columns={["College", "User Type", "Total Cases"]} />
+          <SummaryTable title="Employee Fever Monitoring" rows={employeeFeverRows} columns={["College", "User Type", "Total Cases"]} />
+          <SummaryTable title="Employee High Blood Pressure Cases" rows={employeeBpRows} columns={["College", "User Type", "Total Cases"]} />
+          <SummaryTable title="Employee Elevated Heart Monitoring" rows={employeeHrRows} columns={["College", "User Type", "Total Cases"]} />
         </div>
       </Card>
     </div>

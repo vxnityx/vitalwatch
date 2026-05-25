@@ -54,9 +54,22 @@ async function getList<T>(path: string): Promise<T[]> {
 }
 
 export const wellnessApi = {
-  getStudentRecords: () => getList<StudentRecord>('/studentrecord/'),
-  getFacultyRecords: () => getList<FacultyRecord>('/facultyrecord/'),
+  getStudentRecords: (params?: Record<string, string | number>) =>
+    getList<StudentRecord>(`/studentrecord/${buildQuery(params)}`),
+  getFacultyRecords: (params?: Record<string, string | number>) =>
+    getList<FacultyRecord>(`/facultyrecord/${buildQuery(params)}`),
 };
+
+function buildQuery(params?: Record<string, string | number> | undefined): string {
+  if (!params) return '';
+  const parts: string[] = [];
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null) return;
+    parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+  });
+  if (!parts.length) return '';
+  return `?${parts.join('&')}`;
+}
 
 export function parseBloodPressure(bp: string): { systolic: number; diastolic: number } | null {
   const [systolicRaw, diastolicRaw] = bp.split('/');
