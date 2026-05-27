@@ -2,12 +2,14 @@ from django.shortcuts import render
 
 # Create your views here.
 
+import json
 import socket
+import urllib.error
+import urllib.request
 
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
-from smtplib import SMTPException
 
 from .models import NotificationContact
 from .serializers import NotificationContactSerializer
@@ -110,19 +112,39 @@ def send_notification_contact(request, pk):
 
 	detailed_body = render_to_string('emails/notification_report.html', context)
 
-	# Send synchronously using Django's email backend (Brevo SMTP configured via settings).
+	# Send via Brevo API so Railway does not depend on SMTP socket connectivity.
 	try:
-		from django.core.mail import EmailMessage
-		msg = EmailMessage(subject=subject, body=detailed_body, from_email=settings.DEFAULT_FROM_EMAIL, to=[contact.email])
-		msg.content_subtype = 'html'
-		msg.send(fail_silently=False)
+		api_key = getattr(settings, "BREVO_API_KEY", "").strip()
+		if not api_key:
+			return Response(
+				{"detail": "BREVO_API_KEY is not configured on the backend."},
+				status=status.HTTP_503_SERVICE_UNAVAILABLE,
+			)
+
+		payload = {
+			"sender": {"email": settings.DEFAULT_FROM_EMAIL},
+			"to": [{"email": contact.email}],
+			"subject": subject,
+			"htmlContent": detailed_body,
+		}
+		request = urllib.request.Request(
+			"https://api.brevo.com/v3/smtp/email",
+			data=json.dumps(payload).encode("utf-8"),
+			headers={
+				"accept": "application/json",
+				"api-key": api_key,
+				"content-type": "application/json",
+			},
+			method="POST",
+		)
+		with urllib.request.urlopen(request, timeout=getattr(settings, "EMAIL_TIMEOUT", 10)) as response:
+			response_body = response.read().decode("utf-8")
+
 		return Response({"detail": f"Notification sent to {contact.email}"}, status=status.HTTP_200_OK)
-	except (socket.timeout, TimeoutError):
+	except (urllib.error.URLError, socket.timeout, TimeoutError) as exc:
 		return Response(
-			{"detail": "SMTP request timed out while sending the notification. Check Brevo credentials and network access."},
+			{"detail": f"Brevo API request failed: {exc}"},
 			status=status.HTTP_503_SERVICE_UNAVAILABLE,
 		)
-	except SMTPException as exc:
-		return Response({"detail": f"SMTP error: {exc}"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 	except Exception as exc:
 		return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

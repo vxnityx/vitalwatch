@@ -19,5 +19,7 @@
 
   Set `VITE_API_BASE_URL` to the deployed backend API root, for example `https://<your-backend-service>.up.railway.app/api/v1`.
 
+  For backend email sending on Railway, set `BREVO_API_KEY` on the backend service. The API key is required for the new notification send flow.
+
   Railway will provide the `PORT` environment variable automatically, and the app will listen on that port in production.
   
