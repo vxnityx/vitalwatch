@@ -73,20 +73,43 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "https://vitalwatch-production-8158.up.railway.app"
+
+def _env_csv(name: str, default: list[str]) -> list[str]:
+    raw = os.getenv(name, "")
+    if not raw.strip():
+        return default
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+CORS_ALLOWED_ORIGINS = _env_csv(
+    "CORS_ALLOWED_ORIGINS",
+    [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://vitalwatch-production-8158.up.railway.app",
+    ],
+)
+
+# Keep Railway preview/prod subdomains working even if the frontend URL changes.
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.up\.railway\.app$",
 ]
+
+CSRF_TRUSTED_ORIGINS = _env_csv(
+    "CSRF_TRUSTED_ORIGINS",
+    [
+        "https://vitalwatch-production-8158.up.railway.app",
+    ],
+)
 
 ROOT_URLCONF = "backend.urls"
 
