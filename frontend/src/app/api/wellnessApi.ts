@@ -105,7 +105,21 @@ export type JoinedStudentRecord = {
 
 type ApiListResponse<T> = T[] | { results?: T[] };
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1';
+function resolveApiBaseUrl(): string {
+  const configuredBase = import.meta.env.VITE_API_BASE_URL?.trim();
+
+  if (configuredBase) {
+    return configuredBase.replace(/\/$/, '');
+  }
+
+  if (import.meta.env.DEV) {
+    return 'http://127.0.0.1:8000/api/v1';
+  }
+
+  throw new Error('VITE_API_BASE_URL is not set. Configure the deployed backend URL before building the frontend.');
+}
+
+const API_BASE = resolveApiBaseUrl();
 
 function normalizeList<T>(payload: ApiListResponse<T>): T[] {
   if (Array.isArray(payload)) {
