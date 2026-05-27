@@ -43,3 +43,22 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
+
+class NotificationContact(models.Model):
+    DEPARTMENT_CHOICES = [
+        ("clinic", "Clinic"),
+        ("hr", "HR"),
+        ("guidance", "Guidance"),
+    ]
+
+    department = models.CharField(max_length=32, choices=DEPARTMENT_CHOICES, unique=True)
+    email = models.EmailField(help_text="Email address to send reports to for this department")
+
+    class Meta:
+        db_table = "notification_contact"
+        verbose_name = "Notification Contact"
+        verbose_name_plural = "Notification Contacts"
+
+    def __str__(self):
+        return f"{self.get_department_display()}: {self.email}"
+

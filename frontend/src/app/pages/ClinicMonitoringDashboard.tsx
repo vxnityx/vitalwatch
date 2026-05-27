@@ -1,67 +1,38 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Thermometer, Heart, Activity } from 'lucide-react';
 import { KPICard, Card } from '../components/Card';
-import { StudentRecord, FacultyRecord, wellnessApi } from '../api/wellnessApi';
+import { EmployeeJoinedRecord, JoinedStudentRecord, wellnessApi } from '../api/wellnessApi';
 
-function parseBloodPressure(bp: string): { systolic: number; diastolic: number } | null {
-  const [systolicRaw, diastolicRaw] = bp.split('/');
-  const systolic = Number(systolicRaw);
-  const diastolic = Number(diastolicRaw);
-
-  if (Number.isNaN(systolic) || Number.isNaN(diastolic)) {
-    return null;
-  }
-
-  return { systolic, diastolic };
+function isStudentRedFlag(record: JoinedStudentRecord): boolean {
+  return record.temperature >= 37.8 || record.heart_rate < 60 || record.heart_rate > 100 || record.systolic >= 130 || record.diastolic >= 85;
 }
 
-function isStudentRedFlag(record: StudentRecord): boolean {
-  const bloodPressure = parseBloodPressure(record.Blood_Pressure);
-  const systolic = bloodPressure?.systolic ?? 0;
-  const diastolic = bloodPressure?.diastolic ?? 0;
-
-  return (
-    record.Body_Temperature_C >= 37.8 ||
-    record.Heart_Rate_bpm < 60 ||
-    record.Heart_Rate_bpm > 100 ||
-    systolic >= 130 ||
-    diastolic >= 85
-  );
+function isStudentFever(record: JoinedStudentRecord): boolean {
+  return record.temperature >= 37.8;
 }
 
-function isStudentFever(record: StudentRecord): boolean {
-  return record.Body_Temperature_C >= 37.8;
+function isStudentHighBp(record: JoinedStudentRecord): boolean {
+  return record.systolic >= 130 || record.diastolic >= 85;
 }
 
-function isStudentHighBp(record: StudentRecord): boolean {
-  const bloodPressure = parseBloodPressure(record.Blood_Pressure);
-  return (bloodPressure?.systolic ?? 0) >= 130 || (bloodPressure?.diastolic ?? 0) >= 85;
+function isStudentHighHr(record: JoinedStudentRecord): boolean {
+  return record.heart_rate < 60 || record.heart_rate > 100;
 }
 
-function isStudentHighHr(record: StudentRecord): boolean {
-  return record.Heart_Rate_bpm < 60 || record.Heart_Rate_bpm > 100;
+function isEmployeeRedFlag(record: EmployeeJoinedRecord): boolean {
+  return record.temperature >= 37.8 || record.heart_rate < 60 || record.heart_rate > 100 || record.systolic >= 130 || record.diastolic >= 85;
 }
 
-function isEmployeeRedFlag(record: FacultyRecord): boolean {
-  return (
-    record.Body_Temperature_C >= 37.8 ||
-    record.Heart_Rate_bpm < 60 ||
-    record.Heart_Rate_bpm > 100 ||
-    record.Systolic_BP >= 130 ||
-    record.Diastolic_BP >= 85
-  );
+function isEmployeeFever(record: EmployeeJoinedRecord): boolean {
+  return record.temperature >= 37.8;
 }
 
-function isEmployeeFever(record: FacultyRecord): boolean {
-  return record.Body_Temperature_C >= 37.8;
+function isEmployeeHighBp(record: EmployeeJoinedRecord): boolean {
+  return record.systolic >= 130 || record.diastolic >= 85;
 }
 
-function isEmployeeHighBp(record: FacultyRecord): boolean {
-  return record.Systolic_BP >= 130 || record.Diastolic_BP >= 85;
-}
-
-function isEmployeeHighHr(record: FacultyRecord): boolean {
-  return record.Heart_Rate_bpm < 60 || record.Heart_Rate_bpm > 100;
+function isEmployeeHighHr(record: EmployeeJoinedRecord): boolean {
+  return record.heart_rate < 60 || record.heart_rate > 100;
 }
 
 type TopCaseCard = {
@@ -133,8 +104,8 @@ function SummaryTable({ title, rows, columns }: { title: string; rows: SummaryRo
 }
 
 export function ClinicMonitoringDashboard() {
-  const [studentRecords, setStudentRecords] = useState<StudentRecord[]>([]);
-  const [employeeRecords, setEmployeeRecords] = useState<FacultyRecord[]>([]);
+  const [studentRecords, setStudentRecords] = useState<JoinedStudentRecord[]>([]);
+  const [employeeRecords, setEmployeeRecords] = useState<EmployeeJoinedRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -146,8 +117,8 @@ export function ClinicMonitoringDashboard() {
         setLoading(true);
         setError(null);
         const [students, employees] = await Promise.all([
-          wellnessApi.getStudentRecords(),
-          wellnessApi.getFacultyRecords(),
+          wellnessApi.getJoinedStudentRecords(),
+          wellnessApi.getJoinedEmployeeRecords({ college: 'CITC' }),
         ]);
 
         if (!cancelled) {
@@ -171,36 +142,36 @@ export function ClinicMonitoringDashboard() {
   }, []);
 
   const studentRedFlagRows = useMemo(
-    () => aggregateSummary(studentRecords, isStudentRedFlag, (r) => r.College, (r) => r.Course),
+    () => aggregateSummary(studentRecords, isStudentRedFlag, (r) => r.college || 'CITC', (r) => r.program || 'Unknown'),
     [studentRecords],
   );
   const studentFeverRows = useMemo(
-    () => aggregateSummary(studentRecords, isStudentFever, (r) => r.College, (r) => r.Course),
+    () => aggregateSummary(studentRecords, isStudentFever, (r) => r.college || 'CITC', (r) => r.program || 'Unknown'),
     [studentRecords],
   );
   const studentBpRows = useMemo(
-    () => aggregateSummary(studentRecords, isStudentHighBp, (r) => r.College, (r) => r.Course),
+    () => aggregateSummary(studentRecords, isStudentHighBp, (r) => r.college || 'CITC', (r) => r.program || 'Unknown'),
     [studentRecords],
   );
   const studentHrRows = useMemo(
-    () => aggregateSummary(studentRecords, isStudentHighHr, (r) => r.College, (r) => r.Course),
+    () => aggregateSummary(studentRecords, isStudentHighHr, (r) => r.college || 'CITC', (r) => r.program || 'Unknown'),
     [studentRecords],
   );
 
   const employeeRedFlagRows = useMemo(
-    () => aggregateSummary(employeeRecords, isEmployeeRedFlag, (r) => r.College, (r) => r.User_Type),
+    () => aggregateSummary(employeeRecords, isEmployeeRedFlag, (r) => r.college || 'CITC', (r) => r.office || 'Unknown'),
     [employeeRecords],
   );
   const employeeFeverRows = useMemo(
-    () => aggregateSummary(employeeRecords, isEmployeeFever, (r) => r.College, (r) => r.User_Type),
+    () => aggregateSummary(employeeRecords, isEmployeeFever, (r) => r.college || 'CITC', (r) => r.office || 'Unknown'),
     [employeeRecords],
   );
   const employeeBpRows = useMemo(
-    () => aggregateSummary(employeeRecords, isEmployeeHighBp, (r) => r.College, (r) => r.User_Type),
+    () => aggregateSummary(employeeRecords, isEmployeeHighBp, (r) => r.college || 'CITC', (r) => r.office || 'Unknown'),
     [employeeRecords],
   );
   const employeeHrRows = useMemo(
-    () => aggregateSummary(employeeRecords, isEmployeeHighHr, (r) => r.College, (r) => r.User_Type),
+    () => aggregateSummary(employeeRecords, isEmployeeHighHr, (r) => r.college || 'CITC', (r) => r.office || 'Unknown'),
     [employeeRecords],
   );
 
@@ -251,7 +222,7 @@ export function ClinicMonitoringDashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Clinic Module</h1>
-        <p className="text-gray-600 mt-1">Clinic monitoring analytics organized separately for Students and Employees by College and Course/User Type.</p>
+        <p className="text-gray-600 mt-1">Clinic monitoring analytics organized separately for Students and Employees by College and Program/Office.</p>
       </div>
 
       {error && <Card className="border border-red-200 bg-red-50 text-red-700">Unable to load clinic records: {error}</Card>}
@@ -268,7 +239,10 @@ export function ClinicMonitoringDashboard() {
           <li>Elevated blood pressure readings</li>
         </ul>
         <div className="mt-4 rounded-2xl border-l-4 border-orange-400 bg-orange-50 p-4 text-sm text-gray-700">
-          <strong>Highlight:</strong> The system highlights the colleges, courses, and employee groups with the highest number of red-flag cases for priority clinic monitoring and possible intervention.
+          <strong>Highlight:</strong> The system highlights the colleges, programs, and employee offices with the highest number of red-flag cases for priority clinic monitoring and possible intervention.
+        </div>
+        <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-gray-700">
+          <strong>Mood Level Reference:</strong> 1: Anxious, 2: Worried, 3: Sad, 4: Neutral, 5: Happy
         </div>
       </Card>
 
@@ -287,23 +261,23 @@ export function ClinicMonitoringDashboard() {
 
       <Card>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Student Clinic Monitoring</h2>
-        <p className="text-sm text-gray-600 mb-6">Student cases are organized by College and Course.</p>
+        <p className="text-sm text-gray-600 mb-6">Student cases are organized by College and Program.</p>
         <div className="space-y-6">
-          <SummaryTable title="Student Red-Flag Cases" rows={studentRedFlagRows} columns={["College", "Course", "Total Cases"]} />
-          <SummaryTable title="Student Fever Monitoring" rows={studentFeverRows} columns={["College", "Course", "Total Cases"]} />
-          <SummaryTable title="Student High Blood Pressure Cases" rows={studentBpRows} columns={["College", "Course", "Total Cases"]} />
-          <SummaryTable title="Student Elevated Heart Monitoring" rows={studentHrRows} columns={["College", "Course", "Total Cases"]} />
+          <SummaryTable title="Student Red-Flag Cases" rows={studentRedFlagRows} columns={["College", "Program", "Total Cases"]} />
+          <SummaryTable title="Student Fever Monitoring" rows={studentFeverRows} columns={["College", "Program", "Total Cases"]} />
+          <SummaryTable title="Student High Blood Pressure Cases" rows={studentBpRows} columns={["College", "Program", "Total Cases"]} />
+          <SummaryTable title="Student Elevated Heart Monitoring" rows={studentHrRows} columns={["College", "Program", "Total Cases"]} />
         </div>
       </Card>
 
       <Card>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Employee Clinic Monitoring</h2>
-        <p className="text-sm text-gray-600 mb-6">Employee cases are organized by College and User Type.</p>
+        <p className="text-sm text-gray-600 mb-6">Employee cases are organized by College and Office.</p>
         <div className="space-y-6">
-          <SummaryTable title="Employee Red-Flag Cases" rows={employeeRedFlagRows} columns={["College", "User Type", "Total Cases"]} />
-          <SummaryTable title="Employee Fever Monitoring" rows={employeeFeverRows} columns={["College", "User Type", "Total Cases"]} />
-          <SummaryTable title="Employee High Blood Pressure Cases" rows={employeeBpRows} columns={["College", "User Type", "Total Cases"]} />
-          <SummaryTable title="Employee Elevated Heart Monitoring" rows={employeeHrRows} columns={["College", "User Type", "Total Cases"]} />
+          <SummaryTable title="Employee Red-Flag Cases" rows={employeeRedFlagRows} columns={["College", "Office", "Total Cases"]} />
+          <SummaryTable title="Employee Fever Monitoring" rows={employeeFeverRows} columns={["College", "Office", "Total Cases"]} />
+          <SummaryTable title="Employee High Blood Pressure Cases" rows={employeeBpRows} columns={["College", "Office", "Total Cases"]} />
+          <SummaryTable title="Employee Elevated Heart Monitoring" rows={employeeHrRows} columns={["College", "Office", "Total Cases"]} />
         </div>
       </Card>
     </div>

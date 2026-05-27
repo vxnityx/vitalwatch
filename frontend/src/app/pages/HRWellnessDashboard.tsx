@@ -1,36 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { UserCheck, Heart, TrendingUp, AlertTriangle } from 'lucide-react';
+import { UserCheck, Heart, TrendingUp } from 'lucide-react';
 import { KPICard, Card } from '../components/Card';
-import { FacultyRecord, average, recordDateLabel, wellnessApi } from '../api/wellnessApi';
-
-function parseBloodPressure(bp: string): { systolic: number; diastolic: number } | null {
-  const [systolicRaw, diastolicRaw] = bp.split('/');
-  const systolic = Number(systolicRaw);
-  const diastolic = Number(diastolicRaw);
-
-  if (Number.isNaN(systolic) || Number.isNaN(diastolic)) {
-    return null;
-  }
-
-  return { systolic, diastolic };
-}
-
-function isFever(record: FacultyRecord): boolean {
-  return record.Body_Temperature_C >= 37.8;
-}
-
-function isElevatedBp(record: FacultyRecord): boolean {
-  return record.Systolic_BP >= 130 || record.Diastolic_BP >= 85;
-}
-
-function isElevatedPulse(record: FacultyRecord): boolean {
-  return record.Heart_Rate_bpm < 60 || record.Heart_Rate_bpm > 100;
-}
-
-function isEmotionalConcern(record: FacultyRecord): boolean {
-  const emotion = record.Emotion.toLowerCase();
-  return emotion.includes('sad') || emotion.includes('angry') || emotion.includes('stress') || emotion.includes('anxious') || emotion.includes('worried');
-}
+import { EmployeeJoinedRecord, average, wellnessApi } from '../api/wellnessApi';
 
 type SummaryRow = {
   college: string;
@@ -38,16 +9,32 @@ type SummaryRow = {
   totalCases: number;
 };
 
+function isFever(record: EmployeeJoinedRecord): boolean {
+  return record.temperature >= 37.8;
+}
+
+function isElevatedBp(record: EmployeeJoinedRecord): boolean {
+  return record.systolic >= 130 || record.diastolic >= 85;
+}
+
+function isElevatedPulse(record: EmployeeJoinedRecord): boolean {
+  return record.heart_rate < 60 || record.heart_rate > 100;
+}
+
+function isMoodConcern(record: EmployeeJoinedRecord): boolean {
+  return [1, 2, 3].includes(Number(record.mood_level));
+}
+
 function aggregateRows(
-  records: FacultyRecord[],
-  predicate: (record: FacultyRecord) => boolean,
-  subgroupSelector: (record: FacultyRecord) => string,
+  records: EmployeeJoinedRecord[],
+  predicate: (record: EmployeeJoinedRecord) => boolean,
+  subgroupSelector: (record: EmployeeJoinedRecord) => string,
 ): SummaryRow[] {
   const grouped = new Map<string, SummaryRow>();
 
   records.forEach((record) => {
     if (!predicate(record)) return;
-    const college = record.College || 'Unknown';
+    const college = record.college || 'CITC';
     const subgroup = subgroupSelector(record) || 'Unknown';
     const key = `${college}||${subgroup}`;
     const current = grouped.get(key) ?? { college, subgroup, totalCases: 0 };
@@ -58,12 +45,13 @@ function aggregateRows(
   return Array.from(grouped.values()).sort((a, b) => b.totalCases - a.totalCases).slice(0, 6);
 }
 
-function aggregateMonthlyRows(records: FacultyRecord[]): Array<{ month: string; feverCases: number; elevatedBpCases: number; elevatedPulseCases: number }> {
+function aggregateMonthlyRows(records: EmployeeJoinedRecord[]): Array<{ month: string; feverCases: number; elevatedBpCases: number; elevatedPulseCases: number }> {
   const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const grouped = new Map<string, { feverCases: number; elevatedBpCases: number; elevatedPulseCases: number }>();
 
   records.forEach((record) => {
-    const month = record.Month || 'Unknown';
+    const monthIndex = Number(record.month) - 1;
+    const month = monthIndex >= 0 && monthIndex < monthOrder.length ? monthOrder[monthIndex] : 'Unknown';
     const current = grouped.get(month) ?? { feverCases: 0, elevatedBpCases: 0, elevatedPulseCases: 0 };
     if (isFever(record)) current.feverCases += 1;
     if (isElevatedBp(record)) current.elevatedBpCases += 1;
@@ -77,43 +65,38 @@ function aggregateMonthlyRows(records: FacultyRecord[]): Array<{ month: string; 
 }
 
 function SummaryTable({
-  title,
   rows,
   columns,
 }: {
-  title: string;
   rows: SummaryRow[];
   columns: [string, string, string];
 }) {
   return (
-    <Card>
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{columns[0]}</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{columns[1]}</th>
-              <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{columns[2]}</th>
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-gray-200">
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{columns[0]}</th>
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{columns[1]}</th>
+            <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{columns[2]}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${row.college}-${row.subgroup}`} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+              <td className="py-3 px-4 text-sm text-gray-900">{row.college}</td>
+              <td className="py-3 px-4 text-sm text-gray-700">{row.subgroup}</td>
+              <td className="py-3 px-4 text-sm text-gray-700">{row.totalCases}</td>
             </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={`${row.college}-${row.subgroup}`} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                <td className="py-3 px-4 text-sm text-gray-900">{row.college}</td>
-                <td className="py-3 px-4 text-sm text-gray-700">{row.subgroup}</td>
-                <td className="py-3 px-4 text-sm text-gray-700">{row.totalCases}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 export function HRWellnessDashboard() {
-  const [records, setRecords] = useState<FacultyRecord[]>([]);
+  const [records, setRecords] = useState<EmployeeJoinedRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,9 +107,9 @@ export function HRWellnessDashboard() {
       try {
         setLoading(true);
         setError(null);
-        const facultyRecords = await wellnessApi.getFacultyRecords();
+        const data = await wellnessApi.getJoinedEmployeeRecords({ college: 'CITC' });
         if (!cancelled) {
-          setRecords(facultyRecords);
+          setRecords(data);
         }
       } catch (fetchError) {
         if (!cancelled) {
@@ -147,13 +130,13 @@ export function HRWellnessDashboard() {
   }, []);
 
   const totalWellnessRecords = records.length;
-  const averageTemperature = average(records.map((record) => record.Body_Temperature_C));
-  const averagePulseRate = average(records.map((record) => record.Heart_Rate_bpm));
+  const averageTemperature = average(records.map((record) => record.temperature));
+  const averagePulseRate = average(records.map((record) => record.heart_rate));
 
-  const feverRows = useMemo(() => aggregateRows(records, isFever, (r) => r.User_Type), [records]);
-  const bpRows = useMemo(() => aggregateRows(records, isElevatedBp, (r) => r.User_Type), [records]);
-  const pulseRows = useMemo(() => aggregateRows(records, isElevatedPulse, (r) => r.User_Type), [records]);
-  const emotionalRows = useMemo(() => aggregateRows(records, isEmotionalConcern, (r) => r.User_Type), [records]);
+  const feverRows = useMemo(() => aggregateRows(records, isFever, (r) => r.office), [records]);
+  const bpRows = useMemo(() => aggregateRows(records, isElevatedBp, (r) => r.office), [records]);
+  const pulseRows = useMemo(() => aggregateRows(records, isElevatedPulse, (r) => r.office), [records]);
+  const moodRows = useMemo(() => aggregateRows(records, isMoodConcern, (r) => r.office), [records]);
   const monthlyRows = useMemo(() => aggregateMonthlyRows(records), [records]);
 
   const collegeComparison = useMemo(() => {
@@ -168,7 +151,7 @@ export function HRWellnessDashboard() {
     >();
 
     records.forEach((record) => {
-      const college = record.College || 'Unknown';
+      const college = record.college || 'CITC';
       const current = grouped.get(college) ?? {
         totalRecords: 0,
         feverCases: 0,
@@ -196,60 +179,55 @@ export function HRWellnessDashboard() {
       .slice(0, 6);
   }, [records]);
 
-  const wellnessReportText = [
-    'Employee physiological wellness trends',
-    'College-based wellness comparison',
-    'Elevated blood pressure monitoring',
-    'Pulse rate monitoring',
-    'Fever surveillance',
-    'Workforce physiological wellness monitoring',
-    'Emotional wellness analytics',
-  ];
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">HR Module</h1>
-        <p className="text-gray-600 mt-1">Employee wellness analytics and occupational wellness monitoring dashboard.</p>
+        <p className="text-gray-600 mt-1">Employee wellness analytics from Supabase joined records. College defaults to CITC.</p>
       </div>
+
+      <Card>
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">Mood Level Reference</h3>
+        <p className="text-sm text-gray-600">1: Anxious, 2: Worried, 3: Sad, 4: Neutral, 5: Happy</p>
+      </Card>
 
       {error && <Card className="border border-red-200 bg-red-50 text-red-700">Unable to load HR wellness data: {error}</Card>}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KPICard title="Total Wellness Records" value={loading ? '...' : totalWellnessRecords} icon={<UserCheck className="w-6 h-6" />} color="blue" />
-        <KPICard title="Average Temperature" value={loading ? '...' : `${averageTemperature.toFixed(2)}`} icon={<Heart className="w-6 h-6" />} color="orange" />
-        <KPICard title="Average Pulse Rate" value={loading ? '...' : `${averagePulseRate.toFixed(2)}`} icon={<TrendingUp className="w-6 h-6" />} color="red" />
+        <KPICard title="Average Temperature" value={loading ? '...' : `${averageTemperature.toFixed(2)} °C`} icon={<Heart className="w-6 h-6" />} color="orange" />
+        <KPICard title="Average Heart Rate" value={loading ? '...' : `${averagePulseRate.toFixed(2)} bpm`} icon={<TrendingUp className="w-6 h-6" />} color="red" />
       </div>
 
       <Card>
         <h2 className="text-xl font-semibold text-gray-900 mb-3">Employee Wellness Overview</h2>
         <p className="text-sm text-gray-600">
-          Displays summarized wellness indicators extracted from employee physiological wellness datasets including temperature, blood pressure, pulse rate, and emotional wellness trends.
+          Displays summarized wellness indicators extracted from employee Supabase datasets including temperature, blood pressure, heart rate, and mood trends.
         </p>
       </Card>
 
       <Card>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Fever Monitoring</h2>
-        <p className="text-sm text-gray-600 mb-4">Columns: College, User Type, Total Cases</p>
-        <SummaryTable title="" rows={feverRows} columns={["College", "User Type", "Total Cases"]} />
+        <p className="text-sm text-gray-600 mb-4">Columns: College, Office, Total Cases</p>
+        <SummaryTable rows={feverRows} columns={["College", "Office", "Total Cases"]} />
       </Card>
 
       <Card>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Blood Pressure Monitoring</h2>
-        <p className="text-sm text-gray-600 mb-4">Columns: College, User Type, Total Cases</p>
-        <SummaryTable title="" rows={bpRows} columns={["College", "User Type", "Total Cases"]} />
+        <p className="text-sm text-gray-600 mb-4">Columns: College, Office, Total Cases</p>
+        <SummaryTable rows={bpRows} columns={["College", "Office", "Total Cases"]} />
       </Card>
 
       <Card>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Elevated Pulse Rate Monitoring</h2>
-        <p className="text-sm text-gray-600 mb-4">Columns: College, User Type, Total Cases</p>
-        <SummaryTable title="" rows={pulseRows} columns={["College", "User Type", "Total Cases"]} />
+        <p className="text-sm text-gray-600 mb-4">Columns: College, Office, Total Cases</p>
+        <SummaryTable rows={pulseRows} columns={["College", "Office", "Total Cases"]} />
       </Card>
 
       <Card>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Emotional Wellness Summary</h2>
-        <p className="text-sm text-gray-600 mb-4">Columns: College, User Type, Total Cases</p>
-        <SummaryTable title="" rows={emotionalRows} columns={["College", "User Type", "Total Cases"]} />
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Mood Monitoring</h2>
+        <p className="text-sm text-gray-600 mb-4">Columns: College, Office, Total Cases</p>
+        <SummaryTable rows={moodRows} columns={["College", "Office", "Total Cases"]} />
       </Card>
 
       <Card>
@@ -306,18 +284,6 @@ export function HRWellnessDashboard() {
             </tbody>
           </table>
         </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">HR Wellness Reports</h2>
-        <p className="text-sm text-gray-600 mb-4">
-          The HR Wellness Reports section provides summarized workforce wellness analytics for institutional monitoring, occupational wellness planning, preventive interventions, and wellness program development.
-        </p>
-        <ul className="list-disc pl-6 text-sm text-gray-700 space-y-1">
-          {wellnessReportText.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
       </Card>
     </div>
   );

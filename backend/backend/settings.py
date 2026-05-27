@@ -14,8 +14,30 @@ import os
 from pathlib import Path
 import dj_database_url
 
+
+def _load_dotenv_file(env_path: Path) -> None:
+    """Minimal .env loader for local development without extra dependencies."""
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+
+        # Keep values already provided by the process environment.
+        if key and key not in os.environ:
+            os.environ[key] = value
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load local backend/.env when present so DATABASE_URL and other vars are available.
+_load_dotenv_file(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
@@ -148,6 +170,15 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "user.User"
+
+# Email / SMTP settings (Brevo-compatible)
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = os.getenv("BREVO_SMTP_HOST", os.getenv("EMAIL_HOST", "smtp-relay.brevo.com"))
+EMAIL_PORT = int(os.getenv("BREVO_SMTP_PORT", os.getenv("EMAIL_PORT", 587)))
+EMAIL_HOST_USER = os.getenv("BREVO_SMTP_USER", os.getenv("EMAIL_HOST_USER", ""))
+EMAIL_HOST_PASSWORD = os.getenv("BREVO_SMTP_PASSWORD", os.getenv("EMAIL_HOST_PASSWORD", ""))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() in ("1", "true", "yes")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@yourdomain.com")
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 CELERY_BROKER_URL = REDIS_URL

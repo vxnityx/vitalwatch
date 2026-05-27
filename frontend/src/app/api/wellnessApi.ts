@@ -31,6 +31,78 @@ export type FacultyRecord = {
   Alert_Status: string;
 };
 
+export type EmployeeJoinedRecord = {
+  id: number;
+  employee_id: number;
+  timelog: string;
+  month: number;
+  day: number;
+  year: number;
+  temperature: number;
+  mood_level: number;
+  heart_rate: number;
+  systolic: number;
+  diastolic: number;
+  blood_pressure: string;
+  office: string;
+  role: string;
+  is_active: boolean;
+  college: string;
+  full_name: string;
+};
+
+export type NotificationContact = {
+  id: number;
+  department: 'clinic' | 'hr' | 'guidance';
+  email: string;
+};
+
+export const MOOD_LEVEL_LABELS: Record<number, string> = {
+  1: 'Anxious',
+  2: 'Worried',
+  3: 'Sad',
+  4: 'Neutral',
+  5: 'Happy',
+};
+
+export function moodLabel(level: number | null | undefined): string {
+  if (level === null || level === undefined) {
+    return 'Unknown';
+  }
+
+  return MOOD_LEVEL_LABELS[level] ?? 'Unknown';
+}
+
+export type JoinedStudentRecord = {
+  vitalid: number;
+  consent_id: number;
+  timelog: string;
+  month: number;
+  day: number;
+  year: number;
+  temperature: number;
+  heart_rate: number;
+  systolic: number;
+  diastolic: number;
+  blood_pressure: string;
+  student_id: string;
+  consent_timelog: string | null;
+  consent_type: string;
+  mood_level: number | null;
+  first_name: string;
+  last_name: string;
+  email: string;
+  contact_number: string | null;
+  last_update: string | null;
+  year_level_id: number | null;
+  student_program_id: number | null;
+  program_id: number | null;
+  program: string | null;
+  college_id: number | null;
+  college: string | null;
+  full_name: string;
+};
+
 type ApiListResponse<T> = T[] | { results?: T[] };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1';
@@ -58,6 +130,36 @@ export const wellnessApi = {
     getList<StudentRecord>(`/studentrecord/${buildQuery(params)}`),
   getFacultyRecords: (params?: Record<string, string | number>) =>
     getList<FacultyRecord>(`/facultyrecord/${buildQuery(params)}`),
+  getJoinedStudentRecords: (params?: Record<string, string | number>) =>
+    getList<JoinedStudentRecord>(`/student/records/${buildQuery(params)}`),
+  getJoinedEmployeeRecords: (params?: Record<string, string | number>) =>
+    getList<EmployeeJoinedRecord>(`/employee/records/${buildQuery(params)}`),
+  getNotificationContacts: () => getList<NotificationContact>(`/notification-contacts/`),
+  createNotificationContact: async (payload: Partial<NotificationContact>) => {
+    const res = await fetch(`${API_BASE}/notification-contacts/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to create contact');
+    return (await res.json()) as NotificationContact;
+  },
+  updateNotificationContact: async (id: number, payload: Partial<NotificationContact>) => {
+    const res = await fetch(`${API_BASE}/notification-contacts/${id}/`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to update contact');
+    return (await res.json()) as NotificationContact;
+  },
+  sendNotificationContact: async (id: number) => {
+    const res = await fetch(`${API_BASE}/notification-contacts/${id}/send/`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to send notification');
+    return await res.json();
+  },
 };
 
 function buildQuery(params?: Record<string, string | number> | undefined): string {

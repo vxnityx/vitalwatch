@@ -6,3 +6,15 @@ urlpatterns = [
 
     path('api-auth/', include('rest_framework.urls')),
 ]
+
+from .views import (
+    NotificationContactListCreateAPIView,
+    NotificationContactRetrieveUpdateAPIView,
+    send_notification_contact,
+)
+
+urlpatterns += [
+    path('notification-contacts/', NotificationContactListCreateAPIView.as_view(), name='notification-contacts'),
+    path('notification-contacts/<int:pk>/', NotificationContactRetrieveUpdateAPIView.as_view(), name='notification-contact-detail'),
+    path('notification-contacts/<int:pk>/send/', send_notification_contact, name='notification-contact-send'),
+]

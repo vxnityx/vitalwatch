@@ -7,6 +7,12 @@ from .views import (
     FacultyRecordRetrieveUpdateDestroyAPIView,
     RecordUploadAPIView,
     RecordUploadStatusAPIView,
+    StudentVitalListCreateAPIView,
+    StudentVitalRetrieveUpdateDestroyAPIView,
+    StudentFilterOptionsAPIView,
+    StudentChartsAPIView,
+    StudentJoinedRecordsAPIView,
+    EmployeeJoinedRecordsAPIView,
 )
 
 
@@ -17,4 +23,10 @@ urlpatterns = [
     path("facultyrecord/<int:pk>/", FacultyRecordRetrieveUpdateDestroyAPIView.as_view(), name='facultyrecord-retrieve-update-destroy'),
     path("record-upload/", RecordUploadAPIView.as_view(), name="record-upload"),
     path("record-upload/<str:task_id>/", RecordUploadStatusAPIView.as_view(), name="record-upload-status"),
+    path("student/vitals/", StudentVitalListCreateAPIView.as_view(), name="student-vitals-list-create"),
+    path("student/vitals/<int:pk>/", StudentVitalRetrieveUpdateDestroyAPIView.as_view(), name="student-vitals-rud"),
+    path("student/filters/", StudentFilterOptionsAPIView.as_view(), name="student-filter-options"),
+    path("student/charts/", StudentChartsAPIView.as_view(), name="student-charts"),
+    path("student/records/", StudentJoinedRecordsAPIView.as_view(), name="student-records"),
+    path("employee/records/", EmployeeJoinedRecordsAPIView.as_view(), name="employee-records"),
 ]
