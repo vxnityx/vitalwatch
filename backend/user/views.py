@@ -2,9 +2,12 @@ from django.shortcuts import render
 
 # Create your views here.
 
+import socket
+
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
+from smtplib import SMTPException
 
 from .models import NotificationContact
 from .serializers import NotificationContactSerializer
@@ -114,5 +117,12 @@ def send_notification_contact(request, pk):
 		msg.content_subtype = 'html'
 		msg.send(fail_silently=False)
 		return Response({"detail": f"Notification sent to {contact.email}"}, status=status.HTTP_200_OK)
+	except (socket.timeout, TimeoutError):
+		return Response(
+			{"detail": "SMTP request timed out while sending the notification. Check Brevo credentials and network access."},
+			status=status.HTTP_503_SERVICE_UNAVAILABLE,
+		)
+	except SMTPException as exc:
+		return Response({"detail": f"SMTP error: {exc}"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 	except Exception as exc:
 		return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
