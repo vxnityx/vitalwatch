@@ -85,6 +85,7 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
+    "https://vitalwatch-production-8158.up.railway.app"
 ]
 
 ROOT_URLCONF = "backend.urls"
