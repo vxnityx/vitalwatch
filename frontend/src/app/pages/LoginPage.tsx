@@ -35,7 +35,7 @@ export function LoginPage() {
             </p>
 
             <div className="space-y-6">
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+              {/* <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
                     <Users className="w-6 h-6" />
@@ -45,9 +45,9 @@ export function LoginPage() {
                     <p className="text-sm text-blue-100">Active users monitored</p>
                   </div>
                 </div>
-              </div>
+              </div> */}
 
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+              {/* <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
                     <Heart className="w-6 h-6" />
@@ -57,9 +57,9 @@ export function LoginPage() {
                     <p className="text-sm text-blue-100">Health checks completed</p>
                   </div>
                 </div>
-              </div>
+              </div> */}
 
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+              {/* <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
                     <TrendingUp className="w-6 h-6" />
@@ -69,7 +69,7 @@ export function LoginPage() {
                     <p className="text-sm text-blue-100">Early risk detection rate</p>
                   </div>
                 </div>
-              </div>
+              </div> */}
             </div>
           </div>
         </div>

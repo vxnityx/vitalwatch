@@ -4,14 +4,14 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Users, UserRound, Thermometer, Activity, AlertTriangle } from 'lucide-react';
 import { KPICard, Card } from '../components/Card';
 import {
-  FacultyRecord,
-  StudentRecord,
+  EmployeeJoinedRecord,
+  JoinedStudentRecord,
   wellnessApi,
 } from '../api/wellnessApi';
 
 export function AdminDashboard() {
-  const [students, setStudents] = useState<StudentRecord[]>([]);
-  const [faculty, setFaculty] = useState<FacultyRecord[]>([]);
+  const [students, setStudents] = useState<JoinedStudentRecord[]>([]);
+  const [faculty, setFaculty] = useState<EmployeeJoinedRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,8 +23,8 @@ export function AdminDashboard() {
         setLoading(true);
         setError(null);
         const [studentRecords, facultyRecords] = await Promise.all([
-          wellnessApi.getStudentRecords(),
-          wellnessApi.getFacultyRecords(),
+          wellnessApi.getJoinedStudentRecords(),
+          wellnessApi.getJoinedEmployeeRecords(),
         ]);
 
         if (!cancelled) {
@@ -52,28 +52,44 @@ export function AdminDashboard() {
   const studentRecords = students.length;
   const employeeRecords = faculty.length;
 
+  const recentStudentRecords = useMemo(
+    () =>
+      [...students]
+        .sort((left, right) => new Date(right.timelog).getTime() - new Date(left.timelog).getTime())
+        .slice(0, 5),
+    [students],
+  );
+
+  const recentEmployeeRecords = useMemo(
+    () =>
+      [...faculty]
+        .sort((left, right) => new Date(right.timelog).getTime() - new Date(left.timelog).getTime())
+        .slice(0, 5),
+    [faculty],
+  );
+
   const studentHighTempCount = useMemo(
-    () => students.filter((record) => record.Body_Temperature_C >= 37.5).length,
+    () => students.filter((record) => record.temperature >= 37.5).length,
     [students],
   );
 
   const employeeHighTempCount = useMemo(
-    () => faculty.filter((record) => record.Body_Temperature_C >= 37.5).length,
+    () => faculty.filter((record) => record.temperature >= 37.5).length,
     [faculty],
   );
 
   const studentAbnormalHRCount = useMemo(
-    () => students.filter((record) => record.Heart_Rate_bpm < 60 || record.Heart_Rate_bpm > 100).length,
+    () => students.filter((record) => record.heart_rate < 60 || record.heart_rate > 100).length,
     [students],
   );
 
   const employeeAbnormalHRCount = useMemo(
-    () => faculty.filter((record) => record.Heart_Rate_bpm < 60 || record.Heart_Rate_bpm > 100).length,
+    () => faculty.filter((record) => record.heart_rate < 60 || record.heart_rate > 100).length,
     [faculty],
   );
 
-  const employeeImmediateAlertsCount = useMemo(
-    () => faculty.filter((record) => (record.Alert_Status ?? '').toLowerCase().includes('immediate')).length,
+  const employeeHighHrCount = useMemo(
+    () => faculty.filter((record) => record.heart_rate < 60 || record.heart_rate > 100).length,
     [faculty],
   );
 
@@ -91,14 +107,14 @@ export function AdminDashboard() {
       { name: 'Employee High Temp', value: employeeHighTempCount },
       { name: 'Student Abnormal HR', value: studentAbnormalHRCount },
       { name: 'Employee Abnormal HR', value: employeeAbnormalHRCount },
-      { name: 'Employee Immediate Alerts', value: employeeImmediateAlertsCount },
+      { name: 'Employee High HR', value: employeeHighHrCount },
     ],
     [
       studentHighTempCount,
       employeeHighTempCount,
       studentAbnormalHRCount,
       employeeAbnormalHRCount,
-      employeeImmediateAlertsCount,
+      employeeHighHrCount,
     ],
   );
 
@@ -150,13 +166,13 @@ export function AdminDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Admin Overview</h1>
-          <p className="text-gray-600 mt-1">Central dashboard for student wellness, employee wellness, and monitoring modules.</p>
+          <p className="text-gray-600 mt-1">Central dashboard for live Supabase-backed student and employee wellness records.</p>
         </div>
       </div>
 
       {error && (
         <Card className="border border-red-200 bg-red-50 text-red-700">
-          Unable to load dashboard data from backend: {error}
+          Unable to load Supabase-backed dashboard data: {error}
         </Card>
       )}
 
@@ -167,7 +183,69 @@ export function AdminDashboard() {
         <KPICard title="Employee High Temp (Count)" value={loading ? '...' : employeeHighTempCount} icon={<Thermometer className="w-6 h-6" />} color="orange" />
         <KPICard title="Student Abnormal HR" value={loading ? '...' : studentAbnormalHRCount} icon={<Activity className="w-6 h-6" />} color="red" />
         <KPICard title="Employee Abnormal HR" value={loading ? '...' : employeeAbnormalHRCount} icon={<Activity className="w-6 h-6" />} color="red" />
-        <KPICard title="Employee Immediate Alerts" value={loading ? '...' : employeeImmediateAlertsCount} icon={<AlertTriangle className="w-6 h-6" />} color="emerald" />
+        <KPICard title="Employee High HR" value={loading ? '...' : employeeHighHrCount} icon={<AlertTriangle className="w-6 h-6" />} color="emerald" />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Latest Student Records from Supabase</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Student ID</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Program</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">College</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Temperature</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Heart Rate</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentStudentRecords.map((record) => (
+                  <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{record.student_id}</td>
+                    <td className="py-3 px-4 text-sm text-gray-700">{record.program || 'Unknown'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-700">{record.college || 'Unknown'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-700">{record.temperature.toFixed(1)}°C</td>
+                    <td className="py-3 px-4 text-sm text-gray-700">{record.heart_rate}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{new Date(record.timelog).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Latest Employee Records from Supabase</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Employee</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Office</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">College</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Temperature</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Heart Rate</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentEmployeeRecords.map((record) => (
+                  <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{record.full_name || String(record.employee_id)}</td>
+                    <td className="py-3 px-4 text-sm text-gray-700">{record.office || 'Unknown'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-700">{record.college || 'CITC'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-700">{record.temperature.toFixed(1)}°C</td>
+                    <td className="py-3 px-4 text-sm text-gray-700">{record.heart_rate}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{new Date(record.timelog).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

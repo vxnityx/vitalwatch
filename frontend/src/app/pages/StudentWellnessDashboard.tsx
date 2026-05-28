@@ -32,6 +32,30 @@ function formatBloodPressure(record: JoinedStudentRecord): string {
   return `${record.systolic}/${record.diastolic}`;
 }
 
+function formatProgramTick(value: string): string[] {
+  const words = value.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+
+  words.forEach((word) => {
+    const nextLine = currentLine ? `${currentLine} ${word}` : word;
+
+    if (nextLine.length > 18 && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+      return;
+    }
+
+    currentLine = nextLine;
+  });
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines.slice(0, 3);
+}
+
 export function StudentWellnessDashboard() {
   const [records, setRecords] = useState<JoinedStudentRecord[]>([]);
   const [allRecords, setAllRecords] = useState<JoinedStudentRecord[]>([]);
@@ -263,11 +287,32 @@ export function StudentWellnessDashboard() {
 
         <Card>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Programs by Records</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={programComparisonData} layout="vertical" margin={{ left: 24, right: 16 }}>
+          <ResponsiveContainer width="100%" height={420}>
+            <BarChart data={programComparisonData} layout="vertical" margin={{ left: 12, right: 24, top: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis type="number" stroke="#6b7280" />
-              <YAxis dataKey="program" type="category" stroke="#6b7280" width={140} />
+              <YAxis
+                dataKey="program"
+                type="category"
+                stroke="#6b7280"
+                width={220}
+                interval={0}
+                tick={({ x, y, payload }) => {
+                  const lines = formatProgramTick(String(payload.value));
+
+                  return (
+                    <g transform={`translate(${x},${y})`}>
+                      <text x={0} y={0} textAnchor="end" fill="#6b7280" fontSize={12}>
+                        {lines.map((line, index) => (
+                          <tspan key={`${line}-${index}`} x={0} dy={index === 0 ? 0 : 14}>
+                            {line}
+                          </tspan>
+                        ))}
+                      </text>
+                    </g>
+                  );
+                }}
+              />
               <Tooltip />
               <Bar dataKey="count" fill="#0F6CBD" radius={[0, 8, 8, 0]} />
             </BarChart>

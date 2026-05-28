@@ -138,7 +138,7 @@ def send_notification_contact(request, pk):
 			method="POST",
 		)
 		with urllib.request.urlopen(request, timeout=getattr(settings, "EMAIL_TIMEOUT", 10)) as response:
-			response_body = response.read().decode("utf-8")
+			response.read()
 
 		return Response({"detail": f"Notification sent to {contact.email}"}, status=status.HTTP_200_OK)
 	except (urllib.error.URLError, socket.timeout, TimeoutError) as exc:
@@ -148,3 +148,44 @@ def send_notification_contact(request, pk):
 		)
 	except Exception as exc:
 		return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+def brevo_health_check(request):
+	api_key = getattr(settings, "BREVO_API_KEY", "").strip()
+	if not api_key:
+		return Response(
+			{"ok": False, "detail": "BREVO_API_KEY is not configured on the backend."},
+			status=status.HTTP_503_SERVICE_UNAVAILABLE,
+		)
+
+	request_obj = urllib.request.Request(
+		"https://api.brevo.com/v3/account",
+		headers={
+			"accept": "application/json",
+			"api-key": api_key,
+		},
+		method="GET",
+	)
+
+	try:
+		with urllib.request.urlopen(request_obj, timeout=getattr(settings, "EMAIL_TIMEOUT", 10)) as response:
+			payload = json.loads(response.read().decode("utf-8"))
+		return Response(
+			{
+				"ok": True,
+				"detail": "Brevo API is reachable.",
+				"account": payload,
+			},
+			status=status.HTTP_200_OK,
+		)
+	except (urllib.error.URLError, socket.timeout, TimeoutError) as exc:
+		return Response(
+			{"ok": False, "detail": f"Brevo API request failed: {exc}"},
+			status=status.HTTP_503_SERVICE_UNAVAILABLE,
+		)
+	except Exception as exc:
+		return Response(
+			{"ok": False, "detail": str(exc)},
+			status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+		)
