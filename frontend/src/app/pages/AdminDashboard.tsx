@@ -8,12 +8,15 @@ import {
   JoinedStudentRecord,
   wellnessApi,
 } from '../api/wellnessApi';
+import { Pagination, pageCount, paginate } from '../components/Pagination';
 
 export function AdminDashboard() {
   const [students, setStudents] = useState<JoinedStudentRecord[]>([]);
   const [faculty, setFaculty] = useState<EmployeeJoinedRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [studentPage, setStudentPage] = useState(1);
+  const [employeePage, setEmployeePage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -190,7 +193,7 @@ export function AdminDashboard() {
         <Card>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Latest Student Records from Supabase</h3>
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full identifying-record-table">
               <thead>
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Student ID</th>
@@ -202,7 +205,7 @@ export function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {recentStudentRecords.map((record) => (
+                {paginate(recentStudentRecords, studentPage, 10).map((record) => (
                   <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-4 text-sm font-medium text-gray-900">{record.student_id}</td>
                     <td className="py-3 px-4 text-sm text-gray-700">{record.program || 'Unknown'}</td>
@@ -214,13 +217,14 @@ export function AdminDashboard() {
                 ))}
               </tbody>
             </table>
+            <Pagination currentPage={studentPage} pageCount={pageCount(recentStudentRecords.length, 10)} onPageChange={setStudentPage} />
           </div>
         </Card>
 
         <Card>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Latest Employee Records from Supabase</h3>
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full identifying-record-table">
               <thead>
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Employee</th>
@@ -232,7 +236,7 @@ export function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {recentEmployeeRecords.map((record) => (
+                {paginate(recentEmployeeRecords, employeePage, 10).map((record) => (
                   <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-4 text-sm font-medium text-gray-900">{record.full_name || String(record.employee_id)}</td>
                     <td className="py-3 px-4 text-sm text-gray-700">{record.office || 'Unknown'}</td>
@@ -244,6 +248,7 @@ export function AdminDashboard() {
                 ))}
               </tbody>
             </table>
+            <Pagination currentPage={employeePage} pageCount={pageCount(recentEmployeeRecords.length, 10)} onPageChange={setEmployeePage} />
           </div>
         </Card>
       </div>

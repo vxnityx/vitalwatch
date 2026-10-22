@@ -3,6 +3,7 @@ import { BarChart, Bar, CartesianGrid, Cell, PieChart, Pie, ResponsiveContainer,
 import { Briefcase, Heart, Thermometer, Activity, Users } from 'lucide-react';
 import { KPICard, Card } from '../components/Card';
 import { EmployeeJoinedRecord, MOOD_LEVEL_LABELS, average, wellnessApi } from '../api/wellnessApi';
+import { Pagination, pageCount, paginate } from '../components/Pagination';
 
 const moodColors = ['#EF4444', '#F59E0B', '#3B82F6', '#14B8A6', '#22C55E'];
 
@@ -24,6 +25,7 @@ export function EmployeeWellnessDashboard() {
   const [selectedCollege, setSelectedCollege] = useState<string>('CITC');
   const [selectedOffice, setSelectedOffice] = useState<string>('All Offices');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('All Employees');
+  const [tablePage, setTablePage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,7 +95,8 @@ export function EmployeeWellnessDashboard() {
     }));
   }, [filteredRecords]);
 
-  const recentRecords = useMemo(() => [...filteredRecords].slice(0, 12), [filteredRecords]);
+  const recentRecords = useMemo(() => [...filteredRecords], [filteredRecords]);
+  const paginatedRecords = paginate(recentRecords, tablePage, 12);
 
   const totalRecords = filteredRecords.length;
   const uniqueEmployees = new Set(filteredRecords.map((record) => record.employee_id)).size;
@@ -192,7 +195,7 @@ export function EmployeeWellnessDashboard() {
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Employee Wellness Records</h3>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full identifying-record-table">
             <thead>
               <tr className="border-b border-gray-200">
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Employee ID</th>
@@ -205,7 +208,7 @@ export function EmployeeWellnessDashboard() {
               </tr>
             </thead>
             <tbody>
-              {recentRecords.map((record) => (
+              {paginatedRecords.map((record) => (
                 <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4 text-sm font-medium text-gray-900">{record.employee_id}</td>
                   <td className="py-3 px-4 text-sm text-gray-700">{record.college || 'CITC'}</td>
@@ -218,6 +221,7 @@ export function EmployeeWellnessDashboard() {
               ))}
             </tbody>
           </table>
+          <Pagination currentPage={tablePage} pageCount={pageCount(recentRecords.length, 12)} onPageChange={setTablePage} />
         </div>
       </Card>
     </div>

@@ -6,6 +6,9 @@ from datetime import datetime
 from celery.result import AsyncResult
 from django.db.models import Avg, Count
 from django.db.models.functions import TruncMonth
+from django.core import signing
+from django.core.signing import BadSignature, SignatureExpired
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -23,6 +26,40 @@ from .serializers import (
 )
 from .tasks import import_records_from_file
 from .supabase_queries import fetch_joined_student_records, fetch_joined_employee_records
+
+
+def _account_roles_from_request(request):
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        return set()
+
+    try:
+        payload = signing.loads(authorization[7:], salt="vitalwatch-account", max_age=60 * 60 * 8)
+    except (BadSignature, SignatureExpired):
+        return set()
+
+    return {str(role).strip().lower() for role in payload.get("roles", []) if str(role).strip()}
+
+
+class RoleRestrictedMixin:
+    allowed_roles = set()
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        roles = _account_roles_from_request(request)
+        if not roles.intersection(self.allowed_roles):
+            raise PermissionDenied("Your account role cannot access this record type.")
+
+
+class StudentRecordsRoleMixin(RoleRestrictedMixin):
+    allowed_roles = {"admin", "administrator", "guidance", "clinic"}
+
+
+class EmployeeRecordsRoleMixin(RoleRestrictedMixin):
+    allowed_roles = {
+        "admin", "administrator", "hr", "human-resource", "human resource",
+        "human_resources", "humanresources", "clinic",
+    }
 
 
 def _parse_iso_date(value):
@@ -64,7 +101,7 @@ def _filter_student_vitals(queryset, params):
     return queryset
 
 
-class StudentRecordListCreateAPIView(ListCreateAPIView):
+class StudentRecordListCreateAPIView(StudentRecordsRoleMixin, ListCreateAPIView):
     queryset = StudentRecord.objects.all()
     serializer_class = StudentRecordSerializer
 
@@ -90,12 +127,12 @@ class StudentRecordListCreateAPIView(ListCreateAPIView):
         return qs
 
 
-class StudentRecordRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
+class StudentRecordRetrieveUpdateDestroyAPIView(StudentRecordsRoleMixin, RetrieveUpdateDestroyAPIView):
     queryset = StudentRecord.objects.all()
     serializer_class = StudentRecordSerializer
 
 
-class FacultyRecordListCreateAPIView(ListCreateAPIView):
+class FacultyRecordListCreateAPIView(EmployeeRecordsRoleMixin, ListCreateAPIView):
     queryset = FacultyRecord.objects.all()
     serializer_class = FacultyRecordSerializer
 
@@ -121,7 +158,7 @@ class FacultyRecordListCreateAPIView(ListCreateAPIView):
         return qs
 
 
-class FacultyRecordRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
+class FacultyRecordRetrieveUpdateDestroyAPIView(EmployeeRecordsRoleMixin, RetrieveUpdateDestroyAPIView):
     queryset = FacultyRecord.objects.all()
     serializer_class = FacultyRecordSerializer
 
@@ -174,7 +211,7 @@ class RecordUploadStatusAPIView(APIView):
         return Response(payload)
 
 
-class StudentVitalListCreateAPIView(ListCreateAPIView):
+class StudentVitalListCreateAPIView(StudentRecordsRoleMixin, ListCreateAPIView):
     queryset = Vital.objects.select_related("consent", "program__college").all()
 
     def get_serializer_class(self):
@@ -187,12 +224,12 @@ class StudentVitalListCreateAPIView(ListCreateAPIView):
         return _filter_student_vitals(queryset, self.request.query_params)
 
 
-class StudentVitalRetrieveUpdateDestroyAPIView(RetrieveUpdateDestroyAPIView):
+class StudentVitalRetrieveUpdateDestroyAPIView(StudentRecordsRoleMixin, RetrieveUpdateDestroyAPIView):
     queryset = Vital.objects.select_related("consent", "program__college").all()
     serializer_class = VitalSerializer
 
 
-class StudentFilterOptionsAPIView(APIView):
+class StudentFilterOptionsAPIView(StudentRecordsRoleMixin, APIView):
     def get(self, request, *args, **kwargs):
         colleges = College.objects.all().order_by("college")
         programs = Program.objects.select_related("college").all().order_by("program")
@@ -213,7 +250,7 @@ class StudentFilterOptionsAPIView(APIView):
         )
 
 
-class StudentChartsAPIView(APIView):
+class StudentChartsAPIView(StudentRecordsRoleMixin, APIView):
     def get(self, request, *args, **kwargs):
         queryset = Vital.objects.select_related("consent", "program__college").all()
         queryset = _filter_student_vitals(queryset, request.query_params)
@@ -257,7 +294,7 @@ class StudentChartsAPIView(APIView):
         )
 
 
-class StudentJoinedRecordsAPIView(APIView):
+class StudentJoinedRecordsAPIView(StudentRecordsRoleMixin, APIView):
     """Read-only joined student wellness records from Supabase tables."""
 
     def get(self, request, *args, **kwargs):
@@ -265,7 +302,7 @@ class StudentJoinedRecordsAPIView(APIView):
         return Response(records)
 
 
-class EmployeeJoinedRecordsAPIView(APIView):
+class EmployeeJoinedRecordsAPIView(EmployeeRecordsRoleMixin, APIView):
     """Read-only joined employee wellness records from Supabase tables."""
 
     def get(self, request, *args, **kwargs):

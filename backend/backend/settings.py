@@ -39,17 +39,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load local backend/.env when present so DATABASE_URL and other vars are available.
 _load_dotenv_file(BASE_DIR / ".env")
 
+def _env_csv(name: str, default: list[str]) -> list[str]:
+    raw = os.getenv(name, "")
+    if not raw.strip():
+        return default
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-u1(y0_n@xutf%%31v7f&@$hmt32pn3z3b+r_1b!sztaw9-)@pw"
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    "django-insecure-u1(y0_n@xutf%%31v7f&@$hmt32pn3z3b+r_1b!sztaw9-)@pw",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "True").lower() in ("1", "true", "yes")
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = _env_csv("ALLOWED_HOSTS", ["localhost", "127.0.0.1"])
 
 
 
@@ -82,13 +91,6 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
-
-def _env_csv(name: str, default: list[str]) -> list[str]:
-    raw = os.getenv(name, "")
-    if not raw.strip():
-        return default
-    return [item.strip() for item in raw.split(",") if item.strip()]
-
 
 CORS_ALLOWED_ORIGINS = _env_csv(
     "CORS_ALLOWED_ORIGINS",

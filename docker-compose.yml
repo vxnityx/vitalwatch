@@ -1,0 +1,53 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      PORT: "8080"
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - redis
+    volumes:
+      - upload-tmp:/tmp
+
+  worker:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    command: celery -A backend worker --loglevel=info
+    env_file:
+      - ./backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+      - backend
+    volumes:
+      - upload-tmp:/tmp
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:8080"
+    depends_on:
+      - backend
+
+volumes:
+  redis-data:
+  upload-tmp:

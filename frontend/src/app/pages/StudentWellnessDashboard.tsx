@@ -1,3 +1,4 @@
+import { Pagination, pageCount, paginate } from '../components/Pagination';
 import { useEffect, useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { GraduationCap, AlertTriangle, Thermometer, Heart, Activity, Smile } from 'lucide-react';
@@ -16,7 +17,7 @@ function isHighTemperature(record: JoinedStudentRecord): boolean {
 }
 
 function isAbnormalHeartRate(record: JoinedStudentRecord): boolean {
-  return record.Heart_Rate_bpm < 60 || record.Heart_Rate_bpm > 100;
+  return record.heart_rate < 60 || record.heart_rate > 100;
 }
 
 function formatDateLabel(record: JoinedStudentRecord): string {
@@ -62,6 +63,8 @@ export function StudentWellnessDashboard() {
   const [selectedCollege, setSelectedCollege] = useState<string>('All Colleges');
   const [selectedProgram, setSelectedProgram] = useState<string>('All Programs');
   const [selectedStudentId, setSelectedStudentId] = useState<string>('All Students');
+    const [collegePage, setCollegePage] = useState(1);
+    const [latestPage, setLatestPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -189,7 +192,6 @@ export function StudentWellnessDashboard() {
       current.temps.push(record.temperature);
       current.heartRates.push(record.heart_rate);
       if (isHighTemperature(record)) current.highTempCases += 1;
-      if (isAbnormalHeartRate(record)) current.abnormalHrCases += 1;
       grouped.set(college, current);
     });
 
@@ -212,8 +214,9 @@ export function StudentWellnessDashboard() {
       const left = new Date(a.timelog).getTime();
       const right = new Date(b.timelog).getTime();
       return right - left;
-    })
-    .slice(0, 10);
+    });
+  const paginatedCollegeRows = paginate(comparisonWithOtherColleges, collegePage, 8);
+  const paginatedLatestRecords = paginate(latestRecords, latestPage, 10);
 
   return (
     <div className="space-y-6">
@@ -338,7 +341,7 @@ export function StudentWellnessDashboard() {
               </tr>
             </thead>
             <tbody>
-              {comparisonWithOtherColleges.map((college) => (
+              {paginatedCollegeRows.map((college) => (
                 <tr key={college.college} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4 text-sm font-medium text-gray-900">{college.college}</td>
                   <td className="py-3 px-4 text-sm text-gray-700">{college.totalRecords}</td>
@@ -352,13 +355,14 @@ export function StudentWellnessDashboard() {
               ))}
             </tbody>
           </table>
+          <Pagination currentPage={collegePage} pageCount={pageCount(comparisonWithOtherColleges.length, 8)} onPageChange={setCollegePage} />
         </div>
       </Card>
 
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Latest Joined Student Records</h3>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full identifying-record-table">
             <thead>
               <tr className="border-b border-gray-200">
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">Student ID</th>
@@ -372,7 +376,7 @@ export function StudentWellnessDashboard() {
               </tr>
             </thead>
             <tbody>
-              {latestRecords.map((record) => (
+              {paginatedLatestRecords.map((record) => (
                 <tr key={record.vitalid} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4 text-sm font-medium text-gray-900">
                     {record.student_id || 'Unknown'}
@@ -388,6 +392,7 @@ export function StudentWellnessDashboard() {
               ))}
             </tbody>
           </table>
+          <Pagination currentPage={latestPage} pageCount={pageCount(latestRecords.length, 10)} onPageChange={setLatestPage} />
         </div>
       </Card>
     </div>

@@ -12,9 +12,11 @@ from .views import (
     NotificationContactRetrieveUpdateAPIView,
     brevo_health_check,
     send_notification_contact,
+    supabase_login,
 )
 
 urlpatterns += [
+    path('auth/supabase-login/', supabase_login, name='supabase-login'),
     path('notification-contacts/', NotificationContactListCreateAPIView.as_view(), name='notification-contacts'),
     path('notification-contacts/<int:pk>/', NotificationContactRetrieveUpdateAPIView.as_view(), name='notification-contact-detail'),
     path('notification-contacts/<int:pk>/send/', send_notification_contact, name='notification-contact-send'),

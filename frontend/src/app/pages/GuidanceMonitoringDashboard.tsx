@@ -18,6 +18,7 @@ import {
   Legend,
 } from 'recharts';
 import { JoinedStudentRecord, average, moodLabel, wellnessApi } from '../api/wellnessApi';
+import { Pagination, pageCount, paginate } from '../components/Pagination';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -43,6 +44,7 @@ export function GuidanceMonitoringDashboard() {
   const [selectedCollege, setSelectedCollege] = useState<string>('All Colleges');
   const [selectedCourse, setSelectedCourse] = useState<string>('All Courses');
   const [selectedYearLevel, setSelectedYearLevel] = useState<string>('All Year Levels');
+  const [tablePage, setTablePage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,7 +254,7 @@ export function GuidanceMonitoringDashboard() {
       <Card>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Student Mood Records</h3>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full identifying-record-table">
             <thead>
               <tr className="border-b border-gray-200">
                 <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">StudentID</th>
@@ -264,7 +266,7 @@ export function GuidanceMonitoringDashboard() {
               </tr>
             </thead>
             <tbody>
-              {records.slice(0, 200).map((record) => (
+              {paginate(records, tablePage, 20).map((record) => (
                 <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4 text-sm font-medium text-gray-900">{record.student_id}</td>
                   <td className="py-3 px-4">
@@ -280,6 +282,7 @@ export function GuidanceMonitoringDashboard() {
               ))}
             </tbody>
           </table>
+          <Pagination currentPage={tablePage} pageCount={pageCount(records.length, 20)} onPageChange={setTablePage} />
         </div>
       </Card>
     </div>

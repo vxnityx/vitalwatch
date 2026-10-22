@@ -121,6 +121,26 @@ function resolveApiBaseUrl(): string {
 
 const API_BASE = resolveApiBaseUrl();
 
+export type SupabaseLoginResponse = {
+  access_token: string;
+  user: { id: string; email?: string; role?: string; roles?: string[] };
+};
+
+export async function loginWithSupabase(email: string, password: string): Promise<SupabaseLoginResponse> {
+  const response = await fetch(`${API_BASE}/auth/supabase-login/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const payload = (await response.json().catch(() => ({}))) as { detail?: string } & Partial<SupabaseLoginResponse>;
+
+  if (!response.ok) {
+    throw new Error(payload.detail ?? 'Unable to sign in.');
+  }
+
+  return payload as SupabaseLoginResponse;
+}
+
 function normalizeList<T>(payload: ApiListResponse<T>): T[] {
   if (Array.isArray(payload)) {
     return payload;
@@ -130,7 +150,10 @@ function normalizeList<T>(payload: ApiListResponse<T>): T[] {
 }
 
 async function getList<T>(path: string): Promise<T[]> {
-  const response = await fetch(`${API_BASE}${path}`);
+  const token = localStorage.getItem('vitalwatch_access_token') ?? sessionStorage.getItem('vitalwatch_access_token');
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }

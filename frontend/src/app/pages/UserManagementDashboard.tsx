@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from '../components/Card';
 import { wellnessApi, NotificationContact } from '../api/wellnessApi';
+import { Pagination, pageCount, paginate } from '../components/Pagination';
 
 /*
   The rest of this page (KPIs, user table, quick actions, recent activity)
@@ -15,6 +16,7 @@ import { wellnessApi, NotificationContact } from '../api/wellnessApi';
 export function UserManagementDashboard() {
   const [contacts, setContacts] = useState<NotificationContact[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
+  const [contactsPage, setContactsPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +82,7 @@ export function UserManagementDashboard() {
               </tr>
             </thead>
             <tbody>
-              {(['clinic','hr','guidance'] as const).map((dept) => {
+              {paginate(['clinic', 'hr', 'guidance'] as const, contactsPage, 2).map((dept) => {
                 const row = ensureRowFor(dept);
                 return (
                   <tr key={dept} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
@@ -117,6 +119,7 @@ export function UserManagementDashboard() {
               })}
             </tbody>
           </table>
+          <Pagination currentPage={contactsPage} pageCount={pageCount(3, 2)} onPageChange={setContactsPage} />
         </div>
       </Card>
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router';
 import {
   LayoutDashboard,
   GraduationCap,
@@ -21,20 +21,37 @@ import {
 } from 'lucide-react';
 
 const menuItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/dashboard/student-wellness', label: 'Student Wellness', icon: GraduationCap },
-  { path: '/dashboard/employee-wellness', label: 'Employee Wellness', icon: Briefcase },
-  { path: '/dashboard/clinic-monitoring', label: 'Clinic Monitoring', icon: Stethoscope },
-  { path: '/dashboard/guidance-monitoring', label: 'Guidance Monitoring', icon: Brain },
-  { path: '/dashboard/hr-wellness', label: 'HR Wellness', icon: UserCheck },
-  { path: '/dashboard/reports', label: 'Reports', icon: FileText },
-  { path: '/dashboard/record-upload', label: 'Record Upload', icon: Upload },
-  { path: '/dashboard/user-management', label: 'User Management', icon: Users },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'administrator'] },
+  { path: '/dashboard/student-wellness', label: 'Student Wellness', icon: GraduationCap, roles: ['admin', 'administrator', 'guidance', 'clinic'] },
+  { path: '/dashboard/employee-wellness', label: 'Employee Wellness', icon: Briefcase, roles: ['admin', 'administrator', 'hr', 'human-resource', 'human resource', 'clinic'] },
+  { path: '/dashboard/clinic-monitoring', label: 'Clinic Monitoring', icon: Stethoscope, roles: ['admin', 'administrator', 'clinic'] },
+  { path: '/dashboard/guidance-monitoring', label: 'Guidance Monitoring', icon: Brain, roles: ['admin', 'administrator', 'guidance'] },
+  { path: '/dashboard/hr-wellness', label: 'HR Wellness', icon: UserCheck, roles: ['admin', 'administrator', 'hr', 'human-resource', 'human resource'] },
+  { path: '/dashboard/reports', label: 'Reports', icon: FileText, roles: ['admin', 'administrator', 'hr', 'guidance', 'clinic'] },
+  { path: '/dashboard/record-upload', label: 'Record Upload', icon: Upload, roles: ['admin', 'administrator', 'clinic'] },
+  { path: '/dashboard/user-management', label: 'User Management', icon: Users, roles: ['admin', 'administrator'] },
 ];
 
 export function DashboardLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const accountStorage = localStorage.getItem('vitalwatch_account') ?? sessionStorage.getItem('vitalwatch_account');
+  const account = accountStorage ? JSON.parse(accountStorage) as { email?: string; role?: string } : {};
+  const accountRole = account.role?.toLowerCase() ?? '';
+  const isAdmin = accountRole === 'admin' || accountRole === 'administrator';
+  const canViewIdentifyingTables = isAdmin || accountRole === 'clinic';
+  const visibleMenuItems = menuItems.filter((item) => item.roles.includes(accountRole));
+
+  const handleLogout = () => {
+    localStorage.removeItem('vitalwatch_account');
+    sessionStorage.removeItem('vitalwatch_account');
+    localStorage.removeItem('vitalwatch_access_token');
+    localStorage.removeItem('vitalwatch_refresh_token');
+    sessionStorage.removeItem('vitalwatch_access_token');
+    sessionStorage.removeItem('vitalwatch_refresh_token');
+    navigate('/login');
+  };
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -76,7 +93,7 @@ export function DashboardLayout() {
 
         <nav className="flex-1 p-3 sm:p-4 overflow-y-auto">
           <ul className="space-y-1">
-            {menuItems.map((item) => {
+            {visibleMenuItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
               return (
@@ -103,7 +120,11 @@ export function DashboardLayout() {
             <Settings className="w-5 h-5" />
             <span className="text-sm">Settings</span>
           </button>
-          <button className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-50 w-full transition-colors">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-50 w-full transition-colors"
+          >
             <LogOut className="w-5 h-5" />
             <span className="text-sm">Logout</span>
           </button>
@@ -149,8 +170,8 @@ export function DashboardLayout() {
 
               <div className="flex items-center gap-3 pl-3 sm:pl-4 border-l border-gray-200 min-w-0">
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900 truncate">Admin User</p>
-                  <p className="text-xs text-gray-600 truncate">Administrator</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{account.email ?? 'Account'}</p>
+                  <p className="text-xs text-gray-600 truncate">{account.role ?? 'User'}</p>
                 </div>
                 <div className="w-10 h-10 bg-gradient-to-br from-[#0F6CBD] to-[#14B8A6] rounded-xl flex items-center justify-center">
                   <User className="w-5 h-5 text-white" />
@@ -160,7 +181,7 @@ export function DashboardLayout() {
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">
+        <main className={`flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0 ${canViewIdentifyingTables ? '' : 'restricted-record-tables'}`}>
           <Outlet />
         </main>
       </div>

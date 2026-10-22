@@ -3,16 +3,41 @@ import { useNavigate } from 'react-router';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Activity, Heart, TrendingUp, Users } from 'lucide-react';
+import { loginWithSupabase } from '../api/wellnessApi';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/dashboard');
+    setIsSigningIn(true);
+    setLoginError('');
+
+    try {
+      const session = await loginWithSupabase(email, password);
+      const storage = rememberMe ? localStorage : sessionStorage;
+      storage.setItem('vitalwatch_access_token', session.access_token);
+      storage.setItem('vitalwatch_account', JSON.stringify(session.user));
+      const roleRoutes: Record<string, string> = {
+        admin: '/dashboard',
+        administrator: '/dashboard',
+        student: '/dashboard/student-wellness',
+        employee: '/dashboard/employee-wellness',
+        clinic: '/dashboard/clinic-monitoring',
+        guidance: '/dashboard/guidance-monitoring',
+        hr: '/dashboard/hr-wellness',
+      };
+      navigate(roleRoutes[session.user.role?.toLowerCase() ?? ''] ?? '/dashboard');
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Unable to sign in.');
+    } finally {
+      setIsSigningIn(false);
+    }
   };
 
   return (
@@ -120,8 +145,10 @@ export function LoginPage() {
               </a>
             </div>
 
-            <Button type="submit" variant="primary" className="w-full">
-              Sign In
+            {loginError && <p className="text-sm text-red-600" role="alert">{loginError}</p>}
+
+            <Button type="submit" variant="primary" className="w-full" disabled={isSigningIn}>
+              {isSigningIn ? 'Signing In...' : 'Sign In'}
             </Button>
 
             <div className="text-center">

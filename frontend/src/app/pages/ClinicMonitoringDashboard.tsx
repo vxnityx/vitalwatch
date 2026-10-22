@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Thermometer, Heart, Activity } from 'lucide-react';
 import { KPICard, Card } from '../components/Card';
 import { EmployeeJoinedRecord, JoinedStudentRecord, wellnessApi } from '../api/wellnessApi';
+import { Pagination, pageCount, paginate } from '../components/Pagination';
 
 function isStudentRedFlag(record: JoinedStudentRecord): boolean {
   return record.temperature >= 37.8 || record.heart_rate < 60 || record.heart_rate > 100 || record.systolic >= 130 || record.diastolic >= 85;
@@ -76,6 +77,9 @@ function highestSummary(rows: SummaryRow[]): { label: string; value: number } {
 }
 
 function SummaryTable({ title, rows, columns }: { title: string; rows: SummaryRow[]; columns: [string, string, string] }) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8;
+
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
@@ -89,7 +93,7 @@ function SummaryTable({ title, rows, columns }: { title: string; rows: SummaryRo
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {paginate(rows, currentPage, pageSize).map((row) => (
               <tr key={`${row.college}-${row.subgroup}`} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                 <td className="py-3 px-4 text-sm text-gray-900">{row.college}</td>
                 <td className="py-3 px-4 text-sm text-gray-700">{row.subgroup}</td>
@@ -98,6 +102,7 @@ function SummaryTable({ title, rows, columns }: { title: string; rows: SummaryRo
             ))}
           </tbody>
         </table>
+        <Pagination currentPage={currentPage} pageCount={pageCount(rows.length, pageSize)} onPageChange={setCurrentPage} />
       </div>
     </Card>
   );

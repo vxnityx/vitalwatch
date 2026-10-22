@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { UserCheck, Heart, TrendingUp } from 'lucide-react';
 import { KPICard, Card } from '../components/Card';
 import { EmployeeJoinedRecord, average, wellnessApi } from '../api/wellnessApi';
+import { Pagination, pageCount, paginate } from '../components/Pagination';
 
 type SummaryRow = {
   college: string;
@@ -71,6 +72,9 @@ function SummaryTable({
   rows: SummaryRow[];
   columns: [string, string, string];
 }) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8;
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -82,7 +86,7 @@ function SummaryTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {paginate(rows, currentPage, pageSize).map((row) => (
             <tr key={`${row.college}-${row.subgroup}`} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
               <td className="py-3 px-4 text-sm text-gray-900">{row.college}</td>
               <td className="py-3 px-4 text-sm text-gray-700">{row.subgroup}</td>
@@ -91,6 +95,7 @@ function SummaryTable({
           ))}
         </tbody>
       </table>
+      <Pagination currentPage={currentPage} pageCount={pageCount(rows.length, pageSize)} onPageChange={setCurrentPage} />
     </div>
   );
 }
@@ -99,6 +104,8 @@ export function HRWellnessDashboard() {
   const [records, setRecords] = useState<EmployeeJoinedRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [collegePage, setCollegePage] = useState(1);
+  const [monthlyPage, setMonthlyPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,7 +252,7 @@ export function HRWellnessDashboard() {
               </tr>
             </thead>
             <tbody>
-              {collegeComparison.map((row) => (
+              {paginate(collegeComparison, collegePage, 8).map((row) => (
                 <tr key={row.college} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4 text-sm text-gray-900">{row.college}</td>
                   <td className="py-3 px-4 text-sm text-gray-700">{row.totalRecords}</td>
@@ -256,6 +263,7 @@ export function HRWellnessDashboard() {
               ))}
             </tbody>
           </table>
+          <Pagination currentPage={collegePage} pageCount={pageCount(collegeComparison.length, 8)} onPageChange={setCollegePage} />
         </div>
       </Card>
 
@@ -273,7 +281,7 @@ export function HRWellnessDashboard() {
               </tr>
             </thead>
             <tbody>
-              {monthlyRows.map((row) => (
+              {paginate(monthlyRows, monthlyPage, 8).map((row) => (
                 <tr key={row.month} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4 text-sm text-gray-900">{row.month}</td>
                   <td className="py-3 px-4 text-sm text-gray-700">{row.feverCases}</td>
@@ -283,6 +291,7 @@ export function HRWellnessDashboard() {
               ))}
             </tbody>
           </table>
+          <Pagination currentPage={monthlyPage} pageCount={pageCount(monthlyRows.length, 8)} onPageChange={setMonthlyPage} />
         </div>
       </Card>
     </div>
